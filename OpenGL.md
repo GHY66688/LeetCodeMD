@@ -162,3 +162,87 @@ std::string vertexShader =
     unsigned int shader = CreateShader(vertexShader, fragmentShader);
     glUseProgram(shader);
 ```
+
+## 处理着色器
+- 将上一节的着色器字符串写入一个文件，并在主文件中使用fstream读取
+- 读取字符串后需要进行保存，使用sstream保存成数组
+- 建立枚举类，方便访问数组，以及后续编写和阅读(名字对应下标)
+```
+#include<string>
+#include<sstream>
+
+struct ShaderProgrameSource
+{
+    std::string VertexSource;
+    std::string FragmentSource;
+};
+
+static ShaderProgrameSource ParseShader(const std::string& filepath)
+{
+    std::ifstream stream(filepath);
+    std::string line;
+
+    //枚举类，方便后续代码书写和阅读以及存入对应的shader
+    enum class ShaderType
+    {
+        NONE = -1, VERTEX = 0, FRAGMENT = 1
+    };
+
+    //对字符串进行输入输出操作
+    std::stringstream ss[2];
+    ShaderType type = ShaderType::NONE;
+
+    while (getline(stream, line))
+    {
+        //find返回字符串第一个出现的位置，npos表示没找到
+        if (line.find("shader") != std::string::npos)
+        {
+            if (line.find("vertex") != std::string::npos)
+            {
+                //set mode vertex
+                type = ShaderType::VERTEX;
+            }
+            else if (line.find("fragment") != std::string::npos)
+            {
+                //set mode fragment
+                type = ShaderType::FRAGMENT;
+            }
+        }
+        else
+        {
+            //加入换行符后加入对应数组
+            ss[(int)type] << line << '\n';
+        }
+    }
+    return { ss[0].str(), ss[1].str()};
+}
+```
+
+##索引缓冲区
+- 可以重用顶点，避免显存浪费
+- **索引缓冲区类型必须是`unsigned int`**
+- 使用索引缓冲区之前，也必须要指定`position`数组缓冲区，且启动顶点以及指定顶点属性，然后再创建索引缓冲区
+- 将原先使用`position`绘画的指令`glDrawArrays`改为`glDrawElements`
+```
+    //所有索引缓冲区类型必须是unsigned int
+    unsigned int indices[2 * 3] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    ...
+    
+    //索引缓冲区
+    unsigned int ibo = 1;
+    glGenBuffers(1, &ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo); //声明只是一个数组
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 2 * 3 * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+
+    ...
+
+    //有索引缓冲区时使用的方法
+    //依次为画的图形，索引个数， 索引类型，索引缓冲区的指针，由于此处只有一个索引缓冲区
+    //且已经绑定，可以不传指针
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+```
