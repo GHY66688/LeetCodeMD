@@ -246,3 +246,100 @@ static ShaderProgrameSource ParseShader(const std::string& filepath)
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
 ```
+
+## 处理错误
+- 使用glGetError获得 ，从openGL1.1开始就有，仅给一个错误码，需要循环调用，以获得所有的错误
+- glDebugMessageCallback，从openGL4.3开始，解释较为详细
+- 灵活使用宏，减少书写重复代码，甚至可以加入出错的函数名，所在文件以及行数
+
+![img](./OpenGL_img/断点报错.png)
+![img](./OpenGL_img/控制台报错信息.png)
+
+```
+//宏，如果为false则调用断点函数，该函数随编译器的不同而不同，此处为MSVC
+#define ASSERT(x) if (!(x)) __debugbreak();
+
+//\为转义符后面不能加任何东西，否则会出错
+//最后不需要加;,因为使用GLCall(x)后就是以;结尾
+//加#可以转成字符串， __FILE__和__LINE__都应该是所有编译器支持的
+#define GLCall(x) GLCleanError();\
+    x;\
+    ASSERT(GLLogCall(#x, __FILE__, __LINE__))
+
+static void GLCleanError()
+{
+    while (glGetError() != GL_NO_ERROR);
+}
+
+static bool GLLogCall()
+{
+    while (GLenum error = glGetError())
+    {
+        std::cout << "[openGL Error] (" << error << ")" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+...
+
+GLCleanError(); //确保前面没有任何错误
+glDrawElements(GL_TRIANGLES, 6, GL_INT, nullptr);
+ASSERT(GLLogCall()); //确保错误来自上述函数
+
+//或采用宏
+GLCall(glDrawElements(GL_TRIANGLES, 6, GL_INT, nullptr));
+
+```
+
+
+## 统一变量
+- 每一次绘制都需要设置一次，可以在调用`glDrawArrays`和`glDrawElements`或其他任何绘制函数之前设置
+- 而**属性**则只需要设置一次，比如：点的位置
+- 需要在shaders文件中声明统一变量
+
+```
+uniform vec4 u_Color;
+
+void main()
+{
+	color = u_Color;
+};
+```
+- 在项目绑定着色器后，指定着色器和尝试获取的统一变量
+
+```
+GLCall(glUseProgram(shader));
+//指定着色器(获得对应着色器的location)和尝试获取的统一变量
+GLCall(int location = glGetUniformLocation(shader, "u_Color"));
+ASSERT(location != -1); //openGL会把不用的变量直接删除，导致出现-1的情况
+GLCall(glUniform4f(location, 0.2f, 0.3f, 0.8f, 1.0f));
+```
+- 可以在绘制函数调用前或后进行统一变量的更新
+
+```
+float r = 0.0f;
+float increment = 0.05f;
+...
+{
+    ...
+    GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
+
+    GLCall(glUniform4f(location, r, 0.3f, 0.8f, 1.0f));
+    if (r > 1.0f)
+    {
+        increment = -0.05f;
+    }
+    else if (r < 0.0f)
+    {
+        increment = 0.05f;
+    }
+    r += increment;
+}
+```
+- 可以在创建上下文函数之后设置画面帧率
+```
+//设定画面帧率,应该为垂直同步或者是主频的刷新率
+//数字越小，刷新越快，反之，越慢
+    glfwSwapInterval(1);
+```
