@@ -343,3 +343,48 @@ float increment = 0.05f;
 //数字越小，刷新越快，反之，越慢
     glfwSwapInterval(1);
 ```
+
+## 顶点数组对象(VAO)
+- 在DirectX等其他渲染接口中并不真正存在，是openGL独有的或者说是它的一个原始接口
+- 是一种通过一种特定规范绑定顶点缓冲区的方式
+- 如果需要绘制多个对象，则需要绑定顶点缓冲区，绑定索引缓冲区，然后绘制
+- 如果有多个对象，则需要每次都重新绑定需要绘制的所有东西，即需要在while循环中每次都进行绑定操作(绑定着色器、顶点缓冲区、索引缓冲区);只需要更换着色器、两个缓冲区就可以实现绘制不同对象了
+
+```
+{
+    ...
+    //绑定着色器、顶点缓冲区、索引缓冲区
+    GLCall(glUseProgram(shader));
+    GLCall(glUniform4f(location, r, 0.3f, 0.8f, 1.0f));
+    GLCall(glBindBuffer(GL_ARRAY_BUFFER, buffer));
+    GLCall(glEnableVertexAttribArray(0));
+    GLCall(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, 0));
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo));
+    ...
+}
+```
+- 虽然此处并没有显式创建VAO，但是openGL的兼容性配置文件(compatibility profile)已经帮我们创建了一个VAO，(猜测为`glEnableVertexAttribArray(0)`中的0即为隐式创建的VAO的索引)
+- 但是核心配置文件(core profile)并不会创建，需要手动创建，之后可以移除上述代码块中的绑定顶点缓冲区，激活顶点以及指定顶点操作
+- 原理：
+  - 绑定VAO(`glBindVertexArray(vao)`)和绑定顶点缓冲区(`glBindBuffer(GL_ARRAY_BUFFER, buffer)`)时，实际上没有东西去链接这两个
+  - `glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, 0)`中的第一个0其实就是将顶点缓冲区索引为0的位置绑定到了`GL_ARRAY_BUFFER`中，当需要绑定其他顶点缓冲区时，只需要将0变为其他值即可
+
+```
+//在创建缓冲区前，创建VAO
+//创建一个VAO
+unsigned int vao;
+GLCall(glGenVertexArrays(1, &vao));
+GLCall(glBindVertexArray(vao));
+
+...
+
+{
+    ...
+
+    GLCall(glUseProgram(shader));
+    GLCall(glUniform4f(location, r, 0.3f, 0.8f, 1.0f));
+    GLCall(glBindVertexArray(vao));
+    GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo));
+}    
+```
+- 可以设置一个全局VAO将所有对象循环绑定，或者为每一个对象创建一个VAO
