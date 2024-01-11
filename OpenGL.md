@@ -388,3 +388,110 @@ GLCall(glBindVertexArray(vao));
 }    
 ```
 - 可以设置一个全局VAO将所有对象循环绑定，或者为每一个对象创建一个VAO
+
+
+## 将以上方法抽象成类
+- 将报错检测抽象成`Renderer`类，包括ASSERT、CLCall、GLCleanError、GLLogCall
+- 将VertexBuffer和IndexBuffer抽象成类，在构造函数中创建缓冲区，Bind中进行绑定，UnBind中解绑
+- 值得注意的是，抽象之后，openGL会存在bug。当关闭绘图窗口，程序并不会停止，而是会在GLCleanError循环。
+  - 这是因为在关闭绘图窗口后，就失去了有效的openGL上下文和GLGetError，然后就会执行`while (glGetError() != GL_NO_ERROR);`；此时有两种方法，一种是创建缓冲区时使用new分配，在`glfwTerminate();`前delete掉它们。另外一种是在glfw的作用域中额外增加一个作用域，并将代码置于其中
+
+
+##将VAO抽象成类
+- 需要创建一个`VertexBufferLayout`类用来存储不同VertexBuffer的布局，例如：需要绘制的顶点的大小，属性、绘制下一个顶点需要的步长等，代码如下
+  - `VertexBufferElement`只是为了进行vector存储的时候方便而创建的一个类，用来存储VertexBuffer的布局，为`GLCall(glVertexAttribPointer());`做准备，用来指定顶点的属性
+  - 后续的模板函数也只是为了进行存储的时候方便进行，如有需要可以增加对应模板 例如考虑void类 int类等等
+  - 最后就需要返回`m_Elements`和`m_Stride`方便后续激活顶点属性
+
+```
+struct VertexBufferElement
+{
+	unsigned int type;
+	unsigned int count;
+	unsigned char normalized;
+
+	static unsigned int GetSizeOfType(unsigned int type)
+	{
+		switch (type)
+		{
+			case GL_FLOAT:			return 4;
+			case GL_UNSIGNED_INT:	return 4;
+			case GL_UNSIGNED_BYTE:	return 1;
+		}
+		ASSERT(false);
+		return 0;
+	}
+};
+
+class VertexBufferLayout 
+{
+private:
+	std::vector<VertexBufferElement> m_Elements;
+	unsigned int m_Stride;
+
+public:
+	VertexBufferLayout()
+		: m_Stride(0) {}
+
+	template<typename T>
+	void Push(unsigned int count)
+	{
+		static_assert(false);
+	}
+
+	template<>
+	void Push<float>(unsigned int count)
+	{
+		m_Elements.push_back({ GL_FLOAT, count, GL_FALSE });
+		m_Stride += VertexBufferElement::GetSizeOfType(GL_FLOAT) * count;
+	}
+
+	template<>
+	void Push<unsigned int>(unsigned int count)
+	{
+		m_Elements.push_back({ GL_UNSIGNED_INT, count, GL_FALSE });
+		m_Stride += VertexBufferElement::GetSizeOfType(GL_UNSIGNED_INT) * count;
+	}
+
+	template<>
+	void Push<unsigned char>(unsigned int count)
+	{
+		m_Elements.push_back({ GL_UNSIGNED_BYTE, count, GL_TRUE });
+		m_Stride += VertexBufferElement::GetSizeOfType(GL_UNSIGNED_BYTE) * count;
+	}
+
+	inline const std::vector<VertexBufferElement>& GetElements() const { return m_Elements; }
+	inline unsigned int GetStride() const { return m_Stride; }
+};
+```
+- 创建一个`VertexArray`类
+  - 构造函数、析构函数以及Bind和UnBind函数都与VertexBuffer和IndexBuffer的实现方式差不多
+  - 着重看`AddBuffer`。读取layout的`elements`，获取VertexBuffer的布局，然后直接调用`GLCall(glVertexAttribPointer());`即可
+```
+void VertexArray::AddBuffer(const VertexBuffer& vb, const VertexBufferLayout& layout)
+{
+	vb.Bind();
+
+    const auto& elements = layout.GetElements();
+    unsigned int offset = 0;
+    for (unsigned int i = 0; i < elements.size(); ++i)
+    {
+        Bind();
+        const auto& element = elements[i];
+
+        //启动顶点
+        GLCall(glEnableVertexAttribArray(0));
+
+        //i：指明绘制的通用顶点的索引
+        //count和type：一个顶点所占用的大小。例如-0.5f,-0.5f就是count=2，type=GL_FLOAT
+        //normalized：是否标准化，一般都是针对字节使用true，其他为false不采用
+        //stride：当前顶点到下一个顶点需要经过的字节大小，其实就是一个节点的大小
+        //offset：指定属性的起点，例如现在一个顶点存储了4个字节的位置信息和4个字节的材质信息，如果我只需要提取位置信息，则设为0，若需要提取材质信息则设为4
+        GLCall(glVertexAttribPointer(i, element.count, element.type, 
+            element.normalized, layout.GetStride(), (const void*)offset));
+        offset += element.count * VertexBufferElement::GetSizeOfType(element.type);
+
+    }
+
+}
+```
