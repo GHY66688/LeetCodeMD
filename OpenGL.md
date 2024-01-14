@@ -495,3 +495,340 @@ void VertexArray::AddBuffer(const VertexBuffer& vb, const VertexBufferLayout& la
 
 }
 ```
+
+##将着色器抽象成类
+- `Shader`中的`m_FilePath`仅供调试用，也可以不设置；而`m_UniformLocationCache`则是为了减少执行`GetUniformLocation`的次数以提高性能
+```
+struct ShaderProgrameSource
+{
+	std::string VertexSource;
+	std::string FragmentSource;
+};
+
+class Shader
+{
+private:
+	std::string m_FilePath;	//打印，为了知道着色器所属的文件
+	unsigned int m_RendererID;
+	//为了防止GetUniformLocation重复执行(每一帧都会执行),采用哈希表进行缓存
+	std::unordered_map<std::string, int> m_UniformLocationCache;
+public:
+	Shader(const std::string& filepath);
+	~Shader();
+
+	void Bind() const;
+	void UnBind() const;
+
+	//set uniforms
+	void SetUniform4f(const std::string& name, float v0, float v1, float f2, float f3);
+
+private:
+	ShaderProgrameSource ParseShader(const std::string& filepath);
+	unsigned int CompileShader(unsigned int type, const std::string& source);
+	unsigned int CreateShader(const std::string& vertexshader, const std::string& fragmentshader);
+	unsigned int GetUniformLocation(const std::string& name);
+};
+```
+- `ParseShader, ComplieShader, 以及CreateShader`都与先前Application文件中的一致，剩余的函数也均是从Application中进行了参数名更改获得的
+```
+Shader::Shader(const std::string& filepath)
+	:m_FilePath(filepath), m_RendererID(0)
+{
+    ShaderProgrameSource sps = ParseShader(filepath);
+    m_RendererID = CreateShader(sps.VertexSource, sps.FragmentSource);
+}
+
+Shader::~Shader()
+{
+    GLCall(glDeleteProgram(m_RendererID));
+}
+
+
+ShaderProgrameSource Shader::ParseShader(const std::string& filepath)
+{
+    std::ifstream stream(filepath);
+    std::string line;
+
+    //枚举类，方便后续代码书写和阅读以及存入对应的shader
+    enum class ShaderType
+    {
+        NONE = -1, VERTEX = 0, FRAGMENT = 1
+    };
+
+    //对字符串进行输入输出操作
+    std::stringstream ss[2];
+    ShaderType type = ShaderType::NONE;
+
+    while (getline(stream, line))
+    {
+        //find返回字符串第一个出现的位置，npos表示没找到
+        if (line.find("shader") != std::string::npos)
+        {
+            if (line.find("vertex") != std::string::npos)
+            {
+                //set mode vertex
+                type = ShaderType::VERTEX;
+            }
+            else if (line.find("fragment") != std::string::npos)
+            {
+                //set mode fragment
+                type = ShaderType::FRAGMENT;
+            }
+        }
+        else
+        {
+            //加入换行符后加入对应数组
+            ss[(int)type] << line << '\n';
+        }
+    }
+    return { ss[0].str(), ss[1].str() };
+}
+
+unsigned int Shader::CompileShader(unsigned int type, const std::string& source)
+{
+    unsigned int id = glCreateShader(type);
+    const char* src = source.c_str();
+    GLCall(glShaderSource(id, 1, &src, nullptr));
+    GLCall(glCompileShader(id));
+
+    //错误处理
+    int result;
+    GLCall(glGetShaderiv(id, GL_COMPILE_STATUS, &result));
+    if (result == GL_FALSE)
+    {
+        int length;
+        GLCall(glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length));
+        char* message = (char*)alloca(length * sizeof(char));
+        GLCall(glGetShaderInfoLog(id, length, &length, message));
+        std::cout << "Failed to complie" << (type == GL_VERTEX_SHADER ? "vertex" : "fragment") << "shader" << std::endl;
+        std::cout << message << std::endl;
+        GLCall(glDeleteShader(id));
+        return 0;
+    }
+
+    return id;
+}
+
+unsigned int Shader::CreateShader(const std::string& vertexshader, const std::string& fragmentshader)
+{
+    unsigned int program = glCreateProgram();
+    unsigned int vs = CompileShader(GL_VERTEX_SHADER, vertexshader);
+    unsigned int fs = CompileShader(GL_FRAGMENT_SHADER, fragmentshader);
+
+    //附加与链接
+    GLCall(glAttachShader(program, vs));
+    GLCall(glAttachShader(program, fs));
+    GLCall(glLinkProgram(program));
+    GLCall(glValidateProgram(program));
+
+    //删除着色器
+    GLCall(glDeleteShader(vs));
+    GLCall(glDeleteShader(fs));
+
+    return program;
+}
+
+void Shader::Bind() const
+{
+    GLCall(glUseProgram(m_RendererID));
+}
+
+void Shader::UnBind() const
+{
+    GLCall(glUseProgram(0));
+
+}
+
+void Shader::SetUniform4f(const std::string& name, float v0, float v1, float v2, float v3)
+{
+    GLCall(glUniform4f(GetUniformLocation(name), v0, v1, v2, v3));
+}
+
+unsigned int Shader::GetUniformLocation(const std::string& name)
+{
+    if (m_UniformLocationCache.find(name) != m_UniformLocationCache.end())
+        return m_UniformLocationCache[name];
+
+    GLCall(int location = glGetUniformLocation(m_RendererID, name.c_str()));
+    //location=-1 代表没有统一变量或者统一变量已经声明了但是还没用
+    //在实际调试中，并不想因为这个而暂停运行，所以不用ASSERT
+    if (location == -1)
+        std::cout << "Warning: uniform" << name << "doesn't exist!" << std::endl;
+    m_UniformLocationCache[name] = location;
+	return location;
+}
+```
+
+##编写renderer
+- 在openGL中解绑可能会导致性能下降，因为后面会重新进行Bind
+- 将openGL上下文中，将进行`VertexArray,IndexBuffer,Shader`的绑定置于Renderer类中，设置(`Draw(const VertexArray& va, IndexBuffer& ib, Shader& shader) const`)，但是其中的shader会在上下文环境中再次进行绑定，所以在Draw函数中也可以不绑定；此外，还将`glClear`移动到了Renderer类中
+```
+void Renderer::Clear() const
+{
+    GLCall(glClear(GL_COLOR_BUFFER_BIT));
+}
+
+void Renderer::Draw(const VertexArray& va, const IndexBuffer& ib, const Shader& shader) const
+{
+    //shader.Bind();
+    va.Bind();
+    ib.Bind();
+
+    GLCall(glDrawElements(GL_TRIANGLES, ib.GetCount(), GL_UNSIGNED_INT, nullptr));
+
+}
+```
+**注意:**其中有一些技巧，由于`VertexBufferLayout.h`会调用`Renderer.h`，同时`Renderer.h`又会调用`VertexArray.h`(其中调用了`VertexBufferLayout.h`)造成了循环调用，进入死循环，导致程序运行失败。所以采取了以下操作：
+  1. 仅在`VertexArray.h`中声明`class VertexBufferLayout`
+  2. 在`VertexArray.cpp`中调用`VertexBufferLayout.h`
+
+**<font color="#FF0000">(虽然不知道为啥，有可能是静态链接、动态链接的问题吧)</font>**
+
+- 基本上在实际运用过程中会用材质(**material**)代替着色器，材质其实就是一个着色器加上该着色器所有的统一变量，当把材质传递给renderer时，renderer会自动绑定对应着色器并设置统一变量
+
+##纹理(**texture**)
+- 纹理可以理解为一种画笔(???)，可以在展示的矩形上增加东西，例如：一张图片；一根线条等等
+- 从[github](github/nothings/stb)上下载`stb_image.h`，并创建一个`stb_image.cpp`编译一下
+```
+ #define STB_IMAGE_IMPLEMENTATION
+#include"stb_image.h"
+```
+- 创建`Texture`类
+```
+class Texture
+{
+private:
+	unsigned int m_RendererID;
+	std::string m_FilePath;
+	unsigned char* m_LocalBuffer;	//纹理的本地存储
+	int m_Width, m_Height, m_BPP;	//宽度，高度，实际纹理的每像素位
+
+public:
+	Texture(const std::string& path);
+	~Texture();
+
+	//slot 为纹理槽，用来绑定纹理，一般Windows 32个，手机8个，但是主要看显卡支持多少个
+	void Bind(unsigned int slot = 0) const;
+	void Unbind() const;
+
+	inline int GetWidth() const { return m_Width; }
+	inline int GetHeight() const { return m_Height; }
+};
+
+Texture::Texture(const std::string& path)
+	:m_RendererID(0), m_FilePath(path), m_LocalBuffer(nullptr), m_Width(0), 
+	m_Height(0), m_BPP(0)
+{
+	//垂直翻转我们的纹理，因为openGL认为左下角的坐标为(0,0), 而png是从上到下加载图片
+	stbi_set_flip_vertically_on_load(1);
+	
+	//读取图片信息，取地址是因为了该函数能够将数字写入到对应变量中
+	//4表示4个通道 RGBA
+	m_LocalBuffer = stbi_load(path.c_str(), &m_Width, &m_Height, &m_BPP, 4);
+
+	//生成一个纹理，并赋值到m_RendererID
+	GLCall(glGenTextures(1, &m_RendererID));
+	//与VertexBuffer一致，需要什么类型，绑定什么类型
+	GLCall(glBindTexture(GL_TEXTURE_2D, m_RendererID));
+	
+	//如果不指定以下四个参数(缩小过滤器，放大过滤器，水平环绕，垂直环绕，
+	//需要分别指定为GL_LINEAR, GL_LINEAR, GL_CLAMP, GL_CLAMP)会得到黑色的纹理
+
+
+	//i for int, 纹理类型，缩小过滤器的纹理渲染方式为：线性重采样
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+	//						放大过滤器(需要渲染的像素比自身大)
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+	//									水平环绕			嵌入(不会扩大区域)
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
+	//指明纹理类型，每个通道的比特数，共四个通道，宽度，高度，边框的像素数，内部格式，通道格式，数据地址
+	//如果将数据地址设置为0，GPU也会为其分配所需空间，但是不会提供数据
+	GLCall(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_Width, m_Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, m_LocalBuffer));
+	GLCall(glBindTexture(GL_TEXTURE_2D, 0));
+
+	if (m_LocalBuffer)
+		//直接释放cpu空间
+		stbi_image_free(m_LocalBuffer);
+}
+
+Texture::~Texture()
+{
+	GLCall(glDeleteTextures(1, &m_RendererID));
+}
+
+void Texture::Bind(unsigned int slot) const
+{
+	//激活纹理插槽（0+slot）,(这是因为，GL_TEXTURE0~31是连续的数字)
+	GLCall(glActiveTexture(GL_TEXTURE0 + slot));
+	GLCall(glBindTexture(GL_TEXTURE_2D, m_RendererID));
+}
+
+void Texture::Unbind() const
+{
+	GLCall(glBindTexture(GL_TEXTURE_2D, 0));
+}
+```
+- 在openGL的上下文中，在`position`处增加纹理材质，并进行Push
+```
+float position[] = {
+            -0.5f, -0.5f, 0.0f, 0.0f,  //0
+             0.5f, -0.5f, 1.0f, 0.0f,  //1
+             0.5f,  0.5f, 1.0f, 1.0f,  //2
+            -0.5f,  0.5f, 0.0f, 1.0f   //3
+        };
+layout.Push<float>(2);
+layout.Push<float>(2);  //纹理顶点的属性
+
+
+Texture texture("res/Textures/test.png");
+//绑定纹理槽，默认为0号纹理槽
+texture.Bind();
+//用统一变量告诉shader要去0号纹理槽取样，要与上面Bind的槽号相同
+shader.SetUniform1i("u_Texture", 0);
+```
+- 相应地更改`basic.shader`，复制的时候需要把注释去掉，加粗去掉
+```
+#shader vertex
+#version 330 core
+
+layout(location = 0) in vec4 position;
+//导入纹理节点
+layout(location = 1) in vec2 texCoord;
+
+//类似于varying方式进行传递
+out vec2 v_TexCoord;
+
+void main()
+{
+   gl_Position = position;
+   v_TexCoord = texCoord;
+};
+
+
+#shader fragment
+#version 330 core
+
+layout(location = 0) out vec4 color;
+
+in vec2 v_TexCoord;
+
+uniform vec4 u_Color;
+uniform sampler2D u_Texture;
+
+void main()
+{
+	vec4 texColor = texture(u_Texture, v_TexCoord);
+	color = texColor;
+};
+```
+<font color="#FF0000">上面的变量名大小写用错了，即在shader fragment中的`v_TexCoord`写成了`v_Texcoord`导致最后绘制出来的结果就是啥结果都没有</font>
+
+**还有一点，由于此处增加了纹理属性，`VertexArray.cpp`中的`AddBuffer`方法中的一句代码参数需要进行更改**
+```
+//启动顶点
+//当有多个属性时，需要依次启动，否则无法绘制
+//原先i直接设置为0，导致绘制后的颜色仅有一种
+GLCall(glEnableVertexAttribArray(i));
+```
