@@ -832,3 +832,33 @@ void main()
 //原先i直接设置为0，导致绘制后的颜色仅有一种
 GLCall(glEnableVertexAttribArray(i));
 ```
+
+##混合(Blending)
+![img](./OpenGL_img/混合.png)
+- 混合是决定如何将输出颜色(`output`)与目标缓冲区(`target buffer`)中的已经存在的颜色结合起来，(例如：半透明的红色玻璃和蓝色玻璃，混合处会变成紫色，其中output就是指fragment shader输出的颜色，此处为蓝色；target buffer就是要画蓝色玻璃的区域);**一般src是纹理，dest为基底**
+![img](./OpenGL_img/混合控制函数.png)
+- blending 控制
+  - `glEnable(GL_BLEND), glDisable(GL_BLEND)`控制blending的启动与关闭
+  - `glBlendFunc(src, dest)`计算src和dest的方式，使用src和dest的所有通道乘以对应的RGBA因子；`src`是计算src的RGBA因子(默认为`GL_ONE`)，`dest`是计算dest的RBGA因子(默认为`GL_ZERO`)；因此，该函数默认保留src的内容而抛弃dest的内容，因为一个是乘GL_ONE，另一个是乘GL_ZERO
+  - `glBlendEquation(mode)` `mode`默认是`GL_FUNC_ADD`(即src * src_factor + dest * dest_factor)
+  ![img](./OpenGL_img/混合例子.png)
+  - 上面使用的`GL_SRC_ALPHA`和`GL_ONE_MINUS_SRC_ALPHA`就是把src的alpha值当做src的RGBA因子，把1-alpha_src当做dest的RGBA因子(例如，src的alpha为0.5， 则计算GL_FUNC_ADD时，就是`src * 0.5 + dest * (1 - 0.5) = 0.5 * (src + dest)`)，然后将计算得到的结果进行输出
+
+##数学库
+[下载数学库](github.com/g-truc/glm)
+```
+//ortho是生成正交矩阵，创建一个宽为4个单位，高为3个单位的窗口
+//左边界，右边界，下边界，上边界，近平面，远平面
+glm::mat4 proj = glm::ortho(-2.0f, 2.0f, -1.5f, 1.5f, -1.0f, 1.0f);
+```
+- 将该正交矩阵置入`Shader.shader`，使用统一变量来接收，`uniform mat4 u_MVP`(模型视图投影矩阵 model view projection matrix)，然后将其与顶点位置矩阵相乘，以适应屏幕。
+```
+uniform mat4 u_MVP;
+
+void main()
+{
+   gl_Position = u_MVP * position;
+   v_TexCoord = texCoord;
+};
+```
+
