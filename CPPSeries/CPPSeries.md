@@ -1,4 +1,4 @@
-##一些tip
+## 一些tips
 - 编译单元(translation unit)：一个单独的文件，例如cpp
 - 使用sizeof(数据类型)可以得到对应数据类型的大小(以字节为单位)
 - `#pragma once`：被称为 **头文件保护符（"header guard"）**，防止我们将单一头文件多次include到单一编译单元中；或者多个文件会include一个头文件，然后最后的main文件又会将这些文件全部include导致出现多次include；
@@ -19,6 +19,44 @@ else
 
 - 由于VS本身会将编译时生成的文件放到项目文件夹下的Debug文件夹中；而最终生成的exe文件则会放到与.sln同级的Debug文件夹中，查看比较麻烦，可以在下面的设置中更改路径存到指定的文件夹中，并可以区别不同平台以及Debug模式或Release模式
 ![img](./CPP_image/VS_file_folder.png)
+
+- c++11中使用char类定义字符串必须要定义成以下形式`const char* message`，不能省略`const`；双引号的类型是const char*，而单引号才是char；如果想创建char[]来存储字符串，必须要多申请一个空间用来存储空终止符0,例如:`char[5] = {'N', 'a', 'm', 'e', 0};`
+
+- 字符串字面值(string literals)：实际是双引号之间的内容，例如
+`"name"`；只存在于只读内存中
+
+- 几种不同的char
+```
+const char* name = u8"name";    //也可以省略u8,8bit
+const wchar_t* name1 = L"name"; //宽字符,根据编译器不同
+                                //可能是8bit、16bit、32bit
+                                //windows上16bit
+                                //linux上32bit
+//c++11引入
+const char16_t* name2 = u"name";    //16bit
+const char32_t* name3 = U"name";    //32bit
+```
+
+- string进行字符串字面值相加时，只能有一个是字符串字面值
+```
+//std::string name = "name" + "hello";    //报错
+//std::string name = std::string("name") + "hello";   //成功
+
+//或者
+using namespace std::string_literals;
+std::string name = "name"s + "hello";
+
+//或者
+//R忽略转义符，即使加入\n，也会一起打印出来
+const char* name = R"(Line1         //输出：Line1
+Line2                                       Line2
+Line3)"；                                   Line3
+
+//想换行必须加入\n
+const char* name1 = "Line1\n"       //输出：Line1
+    "Line2\n"                               Line2
+    "Line3"\n;                              Line3
+```
 
 ## 预处理
 - 包含`#include, #define, #if, #endif`，其本质都是将对应的文件内容复制到对应位置；
@@ -50,7 +88,7 @@ INTEGER multiply(int a, int b) //生成的预处理文件.i中就会把INTE替�
 ![img](./CPP_image/compile_优化速度.png)
 ![img](./CPP_image/compile_修改.png)
 
-##链接(Linking)
+## 链接(Linking)
 - 每一个cpp文件在编译后都会生成.obj文件，然后将他们链接成.exe文件
 - 每一个.exe文件必须要有一个入口函数，这个函数不一定非要是main函数，可以自定义，如下所示 **（入口点）**：
 ![img](./CPP_image/Link_entry.png)
@@ -108,8 +146,8 @@ int Multlpy(int a, int b)
 }
 ```
 
-##指针(pointer)
-- 原始指针(raw pointer):
+## 指针(pointer)
+- **原始指针(raw pointer):**
   - 指针其实就是一个无符号整数，代表一个内存地址，前面的类型只是表明该内存地址中存储的数据的类型，与指针本身类型无关。
   - **`void* ptr = 0`**：0是地址，但是它不能够写入和读取，只是为了声明该指针为空，void代表完全没有类型，只是为了在进行写入和读取时告诉编译器需要申请多大的空间
   - `&变量`：取该变量的内存地址
@@ -128,7 +166,7 @@ delete[] buffer;        //由于是从堆上申请的，需要手动释放
                         //因为申请的是数组，需要对应的delete[]
 ```
 
-##引用(reference)
+## 引用(reference)
 - 与指针不同，引用必须引用一个已经存在的变量，本身不是变量不会占用内存空间，相当与给被引用对象创建了别名
 
 ##类(class)与结构体(struct)的区别
@@ -136,7 +174,7 @@ delete[] buffer;        //由于是从堆上申请的，需要手动释放
 - 类默认私有，结构体默认公有
 - 具体什么情况使用什么，根据个人观点而定。一般来说，struct用来存储一些简单的变量以及简单的方法，而class则实现一些较为复杂的东西以，继承用class更好
 
-##Static
+## Static
 - 在类或结构体的外面，则代表该类或结构体在link阶段是局部的，只对定义它的编译单元可见
 ```
 //Static.cpp
@@ -153,7 +191,7 @@ extern int value;   //上面没有static修饰词，该句代码会让编译器�
 ```
 - 在类或结构体内部，代表这部分内容是所有实例所共享的
   - 静态方法和静态变量没有对应的实例，所以静态方法无法调用非静态变量
-- 静态局部变量：
+- **静态局部变量：**
   - 假设函数中存在一个静态局部变量，在第一次调用该函数时会初始化为0，然后在每次调用该函数后进行自增操作，则会一直增加；若不是static，则每次会进行初始化并自增
 ```
 void function()
@@ -176,8 +214,11 @@ int main()
     }
 }
 ```
-##单例模式
+
+## 单例模式
+
 仅创建一个实例，并其生命周期为整个程序
+
 ```
 class Singleton
 {
@@ -216,5 +257,159 @@ public:
 int main()
 {
     Singleton::Get().Hello();
+}
+```
+
+## 枚举(enums)
+- 一些值的集合，给一个值指定一个名称
+- 实际就是整数的集合，默认是递增；例如定义A、B、C，则分别为0、1、2；
+若定义A=2、B、C，则分别为2、3、4
+```
+enum Example : unsigned char    //默认是int，但是可以设定类型(仅限整形，float、double不行)
+{
+    A, B, C //其中A=0;B=1;C=2(默认状况下，都是进行递增)
+            //也可以自己赋值：A=2
+};
+
+Example value = A;  //value只能是Example中的一个
+//Example value = 5； //会报错
+```
+
+## 类(class)
+- **构造函数(constructor)**:
+  - 会有默认构造函数
+  - 可以进行函数重载
+  - 当不需要默认构造函数时，可以`class_name() = delete`
+  - 直接调用类内静态函数或变量时，构造函数并不会被调用
+- 析构函数(destructor)：
+  - 对象生命周期结束后(销毁后)自动调用
+  - 可以用来释放申请的内存空间
+- **继承(inheritance)**
+  - 会继承父类的所有东西包括变量和函数
+  - `class sub_class_name : public bas_class_name {};`
+- **虚函数(virtual function)**
+  - 问题来源：在类中正常声明函数，当调用这个函数时，总会去调用属于这个类型的函数
+  - 虚函数引入了要动态分配的东西，因此引入了虚表(vtable)的概念用来编译，其中包含了类中所有虚函数映射列表 **(即想重写一个函数，必须把基类中的原函数设为虚函数，同时在子类的重写的那个函数后面加上override(c++11标准允许加入override标记)提高代码可读性)**
+  - 会有内存开销，需要用来存储虚表，基类中有一个指针专门指向虚表；吗，每次调用虚函数都需要去遍历虚表，带来性能损失(但是其实影响很小)
+
+```
+class Entity
+{
+public:
+    //修改前的方法
+    std::string GetName() {return "Entity";}
+
+    ////修改后的方法，
+    //virtual std::string GetName() {return "Entity";}
+}
+
+
+class Player : public Entity
+{
+private:
+    std::string m_Name;
+public:
+    Player(std::string Name)
+        : m_Name(Name) {}
+    
+    //修改前函数
+    std::string GetName()
+    {
+        return m_Name;
+    }
+
+    ////修改后函数；加入override后还可以帮助查看是否函数参数和名字有错
+    //std::string GetName() overrider
+    //{
+    //    return m_Name;
+    //}
+}
+
+void Print(Entity* e)
+{
+    std::cout << e->GetName() << std::endl;
+}
+
+int main()
+{
+    Entity* e = new Entity();
+    Print(e);   //输出Entity
+
+    Player* p = new Player("Name");
+    Print(p);   //输出Name
+
+    Entity* entity = p;
+    Print(entity);  //输出Entity    
+                    //虽然这边其实是Player类，
+                    //但是按照Print里面指定的Entity类，
+                    //会自动调用Entity类的GetName()方法
+                    //但其实我们希望c++能够调用Player类的
+                    //GetName()方法，因为这实际上是Player类
+                    //在使用修改后的函数后，可以输出Name
+}
+
+```
+- **接口(interface)**
+  - 创建一个只包含未实现方法然后交由子类去实现的类称为接口；在其他语言中有`interface`关键字声明是接口，但在c++中接口其实就是一个只有纯虚函数的类
+  - 纯虚函数：允许我们定义一个在基类中没有实现的函数，强制子类去实现
+  - 接口无法实例化，因为不包含方法实现；只能实例化一个实现了所有纯虚函数的类
+  - 在原来虚函数的基础上，去掉函数本体{}，并将其函数=0；例如`virtual std::string GetName() = 0;`
+  - 若有父类和子类都继承了接口，则子类可以不定义纯虚函数，通过调用父类定义的纯虚函数即可
+```
+class Printable
+{
+public:
+	virtual void GetClassName() = 0;    //纯虚函数
+};
+
+class Entity : public Printable
+{
+public:
+	virtual std::string GetName() { return "Entity"; }
+	void GetClassName() override    //实现基类的纯虚函数
+	{
+		std::cout << "Entity" << std::endl;
+	}
+};
+
+class Player : public Entity    //只需要继承Entity，不用继承Printable
+{
+private:
+	std::string m_Name;
+public:
+	Player(std::string name)
+		: m_Name(name) {}
+
+	std::string GetName() override  //重写Entity中的GetName
+	{
+		return m_Name;
+	}
+
+	void GetClassName() override    //实现基类的纯虚函数
+	{
+		std::cout << "Player" << std::endl;
+	}
+
+};
+
+void Print(Printable* obj)
+{
+	obj->GetClassName();
+}
+
+int main()
+{
+    //Printable a = new Printabel();    //报错，无法实例化
+	Entity* b = new Entity();   //Entity实现了基类纯虚函数可以实例化
+	Print(b);   //输出Entity
+
+	Player* p = new Player("name");
+    //如果Player还继承了Printable类，需要表明是public继承，否则下面的代码会报错，虽然不会影响实际执行，但是我也不知道为什么。且需要实现GetClassName方法，不然无法实例化
+    //如果仅继承Entity类，若Player类中并没有实现GetClassName，则会调用Entity类中的GetClassName，能够实例化
+
+	Print(p);   //若继承了Printable，则必须实现GetClassName
+                //此时输出name
+                //若仅继承Entity，若不实现GetClassName，则输出Entity，若实现GetClassName，则输出Player
+
 }
 ```
