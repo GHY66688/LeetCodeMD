@@ -8,12 +8,12 @@
 ![img](./CPP_image/concept_pragma_once.png)
 - #include的文件如果有.h后缀则属于c标准库，若没有则属于c++
 - `else if`其实并不是关键字，而是以下的缩写（但还是会有点问题，比如再往后写else就没有对应的if，这个可以在该else中嵌套else 也许能解决）
-```
-else
-{
-    if() {}
-}
-```
+    ```
+    else
+    {
+        if() {}
+    }
+    ```
 - 下列三个均为筛选器，而不是真正的文件夹，是以虚拟文件夹的形式来组织代码
 ![img](./CPP_image/VS_fliter.png)
 
@@ -26,57 +26,57 @@ else
 `"name"`；只存在于只读内存中
 
 - 几种不同的char
-```
-const char* name = u8"name";    //也可以省略u8,8bit
-const wchar_t* name1 = L"name"; //宽字符,根据编译器不同
-                                //可能是8bit、16bit、32bit
-                                //windows上16bit
-                                //linux上32bit
-//c++11引入
-const char16_t* name2 = u"name";    //16bit
-const char32_t* name3 = U"name";    //32bit
-```
+    ```
+    const char* name = u8"name";    //也可以省略u8,8bit
+    const wchar_t* name1 = L"name"; //宽字符,根据编译器不同
+                                    //可能是8bit、16bit、32bit
+                                    //windows上16bit
+                                    //linux上32bit
+    //c++11引入
+    const char16_t* name2 = u"name";    //16bit
+    const char32_t* name3 = U"name";    //32bit
+    ```
 
 - string进行字符串字面值相加时，只能有一个是字符串字面值
-```
-//std::string name = "name" + "hello";    //报错
-//std::string name = std::string("name") + "hello";   //成功
+    ```
+    //std::string name = "name" + "hello";    //报错
+    //std::string name = std::string("name") + "hello";   //成功
 
-//或者
-using namespace std::string_literals;
-std::string name = "name"s + "hello";
+    //或者
+    using namespace std::string_literals;
+    std::string name = "name"s + "hello";
 
-//或者
-//R忽略转义符，即使加入\n，也会一起打印出来
-const char* name = R"(Line1         //输出：Line1
-Line2                                       Line2
-Line3)"；                                   Line3
+    //或者
+    //R忽略转义符，即使加入\n，也会一起打印出来
+    const char* name = R"(Line1         //输出：Line1
+    Line2                                       Line2
+    Line3)"；                                   Line3
 
-//想换行必须加入\n
-const char* name1 = "Line1\n"       //输出：Line1
-    "Line2\n"                               Line2
-    "Line3"\n;                              Line3
-```
+    //想换行必须加入\n
+    const char* name1 = "Line1\n"       //输出：Line1
+        "Line2\n"                               Line2
+        "Line3"\n;                              Line3
+    ```
 
 ## 预处理
 - 包含`#include, #define, #if, #endif`，其本质都是将对应的文件内容复制到对应位置；
 例如：有两个文件`EnBranch.h`和`Math.cpp`
 - `#if`可以让我们根据特定条件包含或剔除代码
-```
-//EnBranch.h
-}
+    ```
+    //EnBranch.h
+    }
 
-//Math.cpp
-#define INTEGER x
+    //Math.cpp
+    #define INTEGER x
 
-#if 0           //为0时，则这一部分代码不会进行编译，为1则正常编译
-INTEGER multiply(int a, int b) //生成的预处理文件.i中就会把INTE替换成x
-{
-    INTEGER result = a * b;
-    return result;
-#include"EnBranch.h"    //此处就是把EnBranch.h的内容复制过来，即'}'
-#endif
-```
+    #if 0           //为0时，则这一部分代码不会进行编译，为1则正常编译
+    INTEGER multiply(int a, int b) //生成的预处理文件.i中就会把INTE替换成x
+    {
+        INTEGER result = a * b;
+        return result;
+    #include"EnBranch.h"    //此处就是把EnBranch.h的内容复制过来，即'}'
+    #endif
+    ```
 - 修改如下设置便可以生成.i文件(生成了.i文件后边不后悔生成.obj文件 **(.obj文件内容是01机器码)**；.i文件如下图二和三所示)
 ![img](./CPP_image/compile_file_i.png)
 ![img](./CPP_image/compile_include.png)
@@ -109,62 +109,111 @@ INTEGER multiply(int a, int b) //生成的预处理文件.i中就会把INTE替�
 - 或者，函数定义被写在`Log.h`中，然后存在多个文件同时调用该头文件。而`#inlcude`的逻辑就是把头文件中的代码全部复制到对应文件中，则会导致函数在两个文件中被同时定义，情况就如上面那个错误相同，导致链接失败
   - 一种解决方法是，在头文件中对应函数定义加上修饰词`static`，此时在不同文件中创建的该函数仅自己文件可见，例如`Math.cpp`和`Log.cpp`同时`#include"Log.h"`，则会同时生成两个Log函数，但是这两个Log函数对对方cpp文件是不可见的。在`Math.cpp`中的Log函数，`Log.cpp`是不可见的，就不会导致重复定义。
   - 另一种是增加修饰词`inline`，当cpp文件包含该头文件时，只会将函数本体拿过去替换，而不是定义一个函数
-```
-//Log.h
-void Log(const char* message)
-{
-    std::cout << message << std::endl;
-}
+    ```
+    //Log.h
+    void Log(const char* message)
+    {
+        std::cout << message << std::endl;
+    }
 
-//Math.cpp
-#include "Log.h"
-int Multlpy (int a, int b)
-{
-    //Log("Multlpy")
-    std:: cout << "Multlpy" << std::endl;
-    return a* b;
-}
-```
-- 第三种解决方法，在头文件中仅放函数声明，在cpp文件中写函数定义
-```
-//Log.h
-void Log(const char* message);
+    //Math.cpp
+    #include "Log.h"
+    int Multlpy (int a, int b)
+    {
+        //Log("Multlpy")
+        std:: cout << "Multlpy" << std::endl;
+        return a* b;
+    }
+    ```
+  - 第三种解决方法，在头文件中仅放函数声明，在cpp文件中写函数定义
+    ```
+    //Log.h
+    void Log(const char* message);
 
-//Log.cpp
-#include"Log.h"
-void Log(const char* message)
-{
-    std::cout<< message << std::endl;
-}
+    //Log.cpp
+    #include"Log.h"
+    void Log(const char* message)
+    {
+        std::cout<< message << std::endl;
+    }
 
-//Math.cpp
-#include"Log.h"
-int Multlpy(int a, int b)
-{
-    Log("Multlpy);
-    return a * b;
-}
-```
+    //Math.cpp
+    #include"Log.h"
+    int Multlpy(int a, int b)
+    {
+        Log("Multlpy);
+        return a * b;
+    }
+    ```
 
 ## 指针(pointer)
 - **原始指针(raw pointer):**
   - 指针其实就是一个无符号整数，代表一个内存地址，前面的类型只是表明该内存地址中存储的数据的类型，与指针本身类型无关。
   - **`void* ptr = 0`**：0是地址，但是它不能够写入和读取，只是为了声明该指针为空，void代表完全没有类型，只是为了在进行写入和读取时告诉编译器需要申请多大的空间
   - `&变量`：取该变量的内存地址
-```
-int value = 8;
-void* ptr = &value;
-*ptr = 10;  //会报错，因为编译器不知道要申请多少空间来存储10
-            //这个数字;只需要将上面的代码改为int* ptr = &value
-            //即可正常写入
+    ```
+    int value = 8;
+    void* ptr = &value;
+    *ptr = 10;  //会报错，因为编译器不知道要申请多少空间来存储10
+                //这个数字;只需要将上面的代码改为int* ptr = &value
+                //即可正常写入
 
-char* buffer = new char[8]; //向堆申请了8个字节空间，
-                            //并将该空间的起始位置对应
-                            //的地址赋给buffer
-memset(buffer, 0, 8);   //用0去填充申请的空间
-delete[] buffer;        //由于是从堆上申请的，需要手动释放
-                        //因为申请的是数组，需要对应的delete[]
-```
+    char* buffer = new char[8]; //向堆申请了8个字节空间，
+                                //并将该空间的起始位置对应
+                                //的地址赋给buffer
+    memset(buffer, 0, 8);   //用0去填充申请的空间
+    delete[] buffer;        //由于是从堆上申请的，需要手动释放
+                            //因为申请的是数组，需要对应的delete[]
+    ```
+- **智能指针(smart pointer)**
+
+    在调用new分配内存时，不用自己去调用delete，甚至可以不需要我们去new，本质是对原始指针的封装
+  - unique_ptr
+    - 作用域指针，当超出作用域会自动调用delete并销毁
+    - 只能有一个指针指向某块内存，因为当多个unique_ptr指向同一内存时，若其中有一个指针销毁，则那块内存也会被delete，导致其他unique_ptr失效，因此不能复制unique_ptr
+    - unique_ptr的构造函数是explicit的，只能显式调用，并且删除了拷贝构造函数，以及&引用
+        ```
+        class Entity
+        {
+        public:
+            Entity()
+            {
+                std::cout << "created" << std::endl;
+            }
+
+            ~Entity()
+            {
+                std::cout << "destroyed" << std::endl;
+            }
+            
+            void print() {}
+        };
+
+
+        int main()
+        {
+            //只能够显式调用，不能entity= new Entity();
+            std::unique_ptr<Entity> entity(new Entity());
+            //更好的实现方式，出于异常安全考虑，对unique_ptr很重要
+            std::unique_ptr<Entity> entity1 = std::make_unique<Entity>();
+            entity1->print();
+        }
+        ```
+  - shared_ptr
+    - 通过引用计数来判断是否调用delete并销毁，例如：有两个shared_ptr同时指向同一内存，则引用计数为2，当有指针销毁时，引用计数会减1，当引用计数为0时，调用delete并销毁
+    - 会额外分配一块称为控制块的内存，用来存储引用计数
+    - 如果先new然后给shared_ptr会产生两次内存分配，一次是Entity本身的内存分配，另一次是控制块内存的分配；若直接使用`make_shared<Entity>`则可以将这两次内存分配结合起来，效率更高
+        ```
+        int main()
+        {
+            std::shared_ptr<Entity> sharedentity = new Entity();
+            std::shared_ptr<Entity> sharedentity1 = std::make_shared<Entity>();   //效率更高
+            std::shared_ptr<Entity> e0 = entity1;   //可以复制
+        }
+        ```
+  - weak_ptr
+    - 基本和shared_ptr功能类似，但是把shared_ptr赋值给weak_ptr，并不会增加引用次数`std::weak_ptr<Entity> = sharedentity1;`
+    - 可以用来判断底层对象是否还活着，但不能保证底层对象一直存活
 
 ## 引用(reference)
 - 与指针不同，引用必须引用一个已经存在的变量，本身不是变量不会占用内存空间，相当与给被引用对象创建了别名
@@ -176,44 +225,44 @@ delete[] buffer;        //由于是从堆上申请的，需要手动释放
 
 ## Static
 - 在类或结构体的外面，则代表该类或结构体在link阶段是局部的，只对定义它的编译单元可见
-```
-//Static.cpp
-static int value = 5;
+    ```
+    //Static.cpp
+    static int value = 5;
 
-//Main.cpp
-int value = 10; //编译通过，
-                //因为上面的value仅Static.obj文件可见
-                //若上面没有static修饰词，则编译失败，
-                //会提示link失败，因为该变量被定义了两次
+    //Main.cpp
+    int value = 10; //编译通过，
+                    //因为上面的value仅Static.obj文件可见
+                    //若上面没有static修饰词，则编译失败，
+                    //会提示link失败，因为该变量被定义了两次
 
-extern int value;   //上面没有static修饰词，该句代码会让编译器从其他编译单元里找到value的定义(external linking)，如果上面有static修饰词，则unresolved external symbol 链接失败
+    extern int value;   //上面没有static修饰词，该句代码会让编译器从其他编译单元里找到value的定义(external linking)，如果上面有static修饰词，则unresolved external symbol 链接失败
 
-```
+    ```
 - 在类或结构体内部，代表这部分内容是所有实例所共享的
   - 静态方法和静态变量没有对应的实例，所以静态方法无法调用非静态变量
 - **静态局部变量：**
   - 假设函数中存在一个静态局部变量，在第一次调用该函数时会初始化为0，然后在每次调用该函数后进行自增操作，则会一直增加；若不是static，则每次会进行初始化并自增
-```
-void function()
-{
-    static int value = 0;   //此时主函数会打印1,2,3,4,5
-                            //若没static，则会打印5次1
-                            //相较于直接将其设置为全局变量
-                            //这么设置的value只有才function
-                            //中才会进行操作
-                            //其他函数无法访问value；
-    value++;
-    std::cout << value << std::endl;
-}
-
-int main()
-{
-    for(int i = 0; i < 5; ++i)
+    ```
+    void function()
     {
-        function();
+        static int value = 0;   //此时主函数会打印1,2,3,4,5
+                                //若没static，则会打印5次1
+                                //相较于直接将其设置为全局变量
+                                //这么设置的value只有才function
+                                //中才会进行操作
+                                //其他函数无法访问value；
+        value++;
+        std::cout << value << std::endl;
     }
-}
-```
+
+    int main()
+    {
+        for(int i = 0; i < 5; ++i)
+        {
+            function();
+        }
+    }
+    ```
 
 ## 单例模式
 
@@ -264,16 +313,16 @@ int main()
 - 一些值的集合，给一个值指定一个名称
 - 实际就是整数的集合，默认是递增；例如定义A、B、C，则分别为0、1、2；
 若定义A=2、B、C，则分别为2、3、4
-```
-enum Example : unsigned char    //默认是int，但是可以设定类型(仅限整形，float、double不行)
-{
-    A, B, C //其中A=0;B=1;C=2(默认状况下，都是进行递增)
-            //也可以自己赋值：A=2
-};
+    ```
+    enum Example : unsigned char    //默认是int，但是可以设定类型(仅限整形，float、double不行)
+    {
+        A, B, C //其中A=0;B=1;C=2(默认状况下，都是进行递增)
+                //也可以自己赋值：A=2
+    };
 
-Example value = A;  //value只能是Example中的一个
-//Example value = 5； //会报错
-```
+    Example value = A;  //value只能是Example中的一个
+    //Example value = 5； //会报错
+    ```
 
 ## 类(class)
 - **构造函数(constructor)**:
@@ -292,124 +341,396 @@ Example value = A;  //value只能是Example中的一个
   - 虚函数引入了要动态分配的东西，因此引入了虚表(vtable)的概念用来编译，其中包含了类中所有虚函数映射列表 **(即想重写一个函数，必须把基类中的原函数设为虚函数，同时在子类的重写的那个函数后面加上override(c++11标准允许加入override标记)提高代码可读性)**
   - 会有内存开销，需要用来存储虚表，基类中有一个指针专门指向虚表；吗，每次调用虚函数都需要去遍历虚表，带来性能损失(但是其实影响很小)
 
-```
-class Entity
-{
-public:
-    //修改前的方法
-    std::string GetName() {return "Entity";}
-
-    ////修改后的方法，
-    //virtual std::string GetName() {return "Entity";}
-}
-
-
-class Player : public Entity
-{
-private:
-    std::string m_Name;
-public:
-    Player(std::string Name)
-        : m_Name(Name) {}
-    
-    //修改前函数
-    std::string GetName()
+    ```
+    class Entity
     {
-        return m_Name;
+    public:
+        //修改前的方法
+        std::string GetName() {return "Entity";}
+
+        ////修改后的方法，
+        //virtual std::string GetName() {return "Entity";}
     }
 
-    ////修改后函数；加入override后还可以帮助查看是否函数参数和名字有错
-    //std::string GetName() overrider
-    //{
-    //    return m_Name;
-    //}
-}
 
-void Print(Entity* e)
-{
-    std::cout << e->GetName() << std::endl;
-}
+    class Player : public Entity
+    {
+    private:
+        std::string m_Name;
+    public:
+        Player(std::string Name)
+            : m_Name(Name) {}
+        
+        //修改前函数
+        std::string GetName()
+        {
+            return m_Name;
+        }
 
-int main()
-{
-    Entity* e = new Entity();
-    Print(e);   //输出Entity
+        ////修改后函数；加入override后还可以帮助查看是否函数参数和名字有错
+        //std::string GetName() overrider
+        //{
+        //    return m_Name;
+        //}
+    }
 
-    Player* p = new Player("Name");
-    Print(p);   //输出Name
+    void Print(Entity* e)
+    {
+        std::cout << e->GetName() << std::endl;
+    }
 
-    Entity* entity = p;
-    Print(entity);  //输出Entity    
-                    //虽然这边其实是Player类，
-                    //但是按照Print里面指定的Entity类，
-                    //会自动调用Entity类的GetName()方法
-                    //但其实我们希望c++能够调用Player类的
-                    //GetName()方法，因为这实际上是Player类
-                    //在使用修改后的函数后，可以输出Name
-}
+    int main()
+    {
+        Entity* e = new Entity();
+        Print(e);   //输出Entity
 
-```
+        Player* p = new Player("Name");
+        Print(p);   //输出Name
+
+        Entity* entity = p;
+        Print(entity);  //输出Entity    
+                        //虽然这边其实是Player类，
+                        //但是按照Print里面指定的Entity类，
+                        //会自动调用Entity类的GetName()方法
+                        //但其实我们希望c++能够调用Player类的
+                        //GetName()方法，因为这实际上是Player类
+                        //在使用修改后的函数后，可以输出Name
+    }
+
+    ```
 - **接口(interface)**
   - 创建一个只包含未实现方法然后交由子类去实现的类称为接口；在其他语言中有`interface`关键字声明是接口，但在c++中接口其实就是一个只有纯虚函数的类
   - 纯虚函数：允许我们定义一个在基类中没有实现的函数，强制子类去实现
   - 接口无法实例化，因为不包含方法实现；只能实例化一个实现了所有纯虚函数的类
   - 在原来虚函数的基础上，去掉函数本体{}，并将其函数=0；例如`virtual std::string GetName() = 0;`
   - 若有父类和子类都继承了接口，则子类可以不定义纯虚函数，通过调用父类定义的纯虚函数即可
+    ```
+    class Printable
+    {
+    public:
+        virtual void GetClassName() = 0;    //纯虚函数
+    };
+
+    class Entity : public Printable
+    {
+    public:
+        virtual std::string GetName() { return "Entity"; }
+        void GetClassName() override    //实现基类的纯虚函数
+        {
+            std::cout << "Entity" << std::endl;
+        }
+    };
+
+    class Player : public Entity    //只需要继承Entity，不用继承Printable
+    {
+    private:
+        std::string m_Name;
+    public:
+        Player(std::string name)
+            : m_Name(name) {}
+
+        std::string GetName() override  //重写Entity中的GetName
+        {
+            return m_Name;
+        }
+
+        void GetClassName() override    //实现基类的纯虚函数
+        {
+            std::cout << "Player" << std::endl;
+        }
+
+    };
+
+    void Print(Printable* obj)
+    {
+        obj->GetClassName();
+    }
+
+    int main()
+    {
+        //Printable a = new Printabel();    //报错，无法实例化
+        Entity* b = new Entity();   //Entity实现了基类纯虚函数可以实例化
+        Print(b);   //输出Entity
+
+        Player* p = new Player("name");
+        //如果Player还继承了Printable类，需要表明是public继承，否则下面的代码会报错，虽然不会影响实际执行，但是我也不知道为什么。且需要实现GetClassName方法，不然无法实例化
+        //如果仅继承Entity类，若Player类中并没有实现GetClassName，则会调用Entity类中的GetClassName，能够实例化
+
+        Print(p);   //若继承了Printable，则必须实现GetClassName
+                    //此时输出name
+                    //若仅继承Entity，若不实现GetClassName，则输出Entity，若实现GetClassName，则输出Player
+
+    }
+    ```
+
+- **成员变量初始化列表**
+  - 在构造函数名后，加上`:`，然后在按照类中的变量顺序，进行初始化，若不按顺序写，有些编译器会报警，并且，初始化时会按照成员变量的顺序进行初始化操作，会发生各种错误
+    ```
+        class Entity
+        {
+        private:
+            int m_Score;
+            std::string m_Name;
+        public:
+            Entity()
+                : m_Score(10), m_Name("Unknown) //
+            {}
+        }
+    ```
+  - 如果不使用初始化列表，会执行两次构造函数，导致性能浪费，因此，尽可能多地使用初始化列表
+    ```
+    #include<iostream>
+    #include<string>
+
+    class Example
+    {
+    public:
+        Example()
+        {
+            std::cout << "created Example" << std::endl;
+        }
+
+        Example(int x)
+        {
+            std::cout << "created Example with " << x << std::endl;
+        }
+    };
+
+    class Entity
+    {
+    private:
+        std::string m_Name;
+        Example example;        //这边会实例化一次
+
+    public:
+        Entity()
+        {
+            m_Name = "aaaa";
+            example = Example(8);   //这边又实例化一次
+        }
+
+        //如果使用初始化列表
+        Entity()
+            : example(8)
+        {
+            m_Name = "aaaa";
+        }
+    };
+
+    int main()
+    {
+        Entity e;   //输出 created Example和
+                    //    created Example with 8
+                    //所以example实例化了两次
+
+                    //使用初始化列表，仅输出
+                    //created example with 8
+    }
+
+    ```
+    
+- **this关键字**
+  - 指代当前的这个对象，必须进行实例化
+  - 当某个成员函数需要调用类外函数，且类外函数的参数是该类时，便可以使用this
+  - 如果成员函数是const的，则必须将this进行转换变为const`const Entity* e = this;`
+  - this会根据需要进行隐式变换，从class_name\*到const class_name\*
+    ```
+    class Entity;   //声明，不然下面的Print函数会在运行时报错
+    void Print(Entity& e);  //声明，不然下面调用会报错
+    class Entity
+    {
+    public:
+        Entity()
+        {
+            Print(*this);
+        }
+    };
+
+    void Print(Entity& e)
+    {
+        std::cout << "hey" << std::endl;
+    }
+    ```
+
+## const
+- **常量指针**
+  - 不能够通过解引用改变指针指向的那个值，但是能够改变指针指向的地址，即指针指向的值为常量，而指针本身是变量
 ```
-class Printable
-{
-public:
-	virtual void GetClassName() = 0;    //纯虚函数
-};
+int const* b = 5;   //同样是常量指针
+const int* a = 5;
+*a = 2;     //报错
+a = &b;     //但是可以更改指针指向的地址
+```
+- **指针常量**
+  - 不能够改变指针指向的地址，但是能够通过解引用改变指向的那个值，即指针本身是常量，而指针指向的值是变量
+```
+int* const a = 5;
+*a = 2  //可以改变值
+a = &b; //报错
+```
 
-class Entity : public Printable
+- **常量指针常量**
+  - 指针本身是常量，指向的那个值也是常量
+    ```
+    const int* const a =5;
+    *a = 2; //报错
+    a = &b; //报错
+    ```
+
+- **类中的const**
+  - 在方法名后面加上const，声明该方法不会改变任何实际的类，即不能够修改类成员；**（该方法只能够在类中使用）**
+    ```
+    class Entity
+    {
+    private:
+        int m_x, m_Y;
+    public:
+        int GetX() const
+        {
+            //m_X = 2;  //报错
+            return m_X;
+        }
+    }
+
+    class Player
+    {
+    private:
+        const int* m_X, m_Y;    //此处m_X是const int*
+                                //而m_Y则是const int
+    public:
+        const int* const GetX() const
+        {
+            return m_X;
+        }
+        //表示返回一个指针，其类型是const int* const
+        //同时也声明该函数不会改变类的任何成员
+    }
+    ```
+- **可变变量(mutable)**
+  - 如果真的需要在const函数中，对某些变量进行变更，需要使用`mutable`关键词，允许const方法对该变量进行变更
+    ```
+    class Entity
+    {
+    private:
+        int m_X, m_Y;
+        mutable int var;
+    public:
+        int GetX() const
+        {
+            var = 2;    //这是可以运行的
+            return m_X;
+        }
+    }
+    ```
+  - 在lamda表达式中使用，可以在进行值传递时改变变量的值
+    ```
+    int x = 8;
+    auto f = [=]() mutable   //如果不加该关键词，x++就会报错
+    //当然这种错误可以通过引用来解决，即
+    //auto f = [&]()
+    //但是使用引用后，x就会变成9，可能与想法不符
+    {                       //=表示值传递，&表示引用
+        x++;
+        std::cout << x << std::endl;
+    }
+    f();
+    std::cout << x << std::endl;    //如果是引用，输出9
+                                    //如果是值传递，输出8
+    ```
+
+## new关键字
+- new是一个操作符，类似于+，-，可以实现重载
+- 在堆上分配足够的内存来存储，同时调用对应的构造函数
+- 通常使用new会调用底层的c函数`malloc`
+- 使用new后，一定要delete，否则会造成内存泄漏；如果使用了new class_name[]，则必须要使用delete[]
+  ```
+  Entity* entity0 = new Entity();   //调用构造函数
+  Entity* entity1 = (Entity*)malloc(sizeof(Entity)) //不调用构造函数
+  //在c中不需要将类型转换为Entity*，但是在c++中需要转换
+  ```
+
+## 隐式转换
+- 仅进行一次转换，但是和视频p40不同，现在好像const char[]不会隐式转换为string了
+- explicit可以禁止隐式转换，在构造函数前加上该关键字，则不会进行隐式转换
+    ```
+    class Entity
+    {
+    public:
+        std::string m_Name;
+        int m_Age;
+
+    public:
+        Entity(const std::string& name)
+            : m_Name(name), m_Age(-1) {}
+
+        (explicit) Entity(int age)
+            : m_Name("Unknow"), m_Age(age) {}
+    };
+
+    void Print(const Entity& e)
+    {
+        std::cout << e.m_Name << " " << e.m_Age << std::endl;
+    }
+
+    int main()
+    {
+        //尽量避免以下写法
+        Entity a = "name";  //报错，无法从const char[]
+                            //转向Entity
+        Entity b = std::string("name"); //正常运行
+        Entity a = 22;  //正常运行，如果对应构造函数有explicit
+                        //关键字，则报错
+        Print(22);      //正常运行，如果对应构造函数有explicit
+                        //关键字，则报错
+        Print("name");  //报错，不存在从const char[]
+                        //到Entity的构造函数
+        Print(std::string("name")); //正常运行
+        Print(Entity("name"));      //正常运行
+    }
+    ```
+
+## 操作符重载
+- 对于<<重载，一定要注意返回的是 **`std::ostream&`**
+```
+struct Vector2
 {
-public:
-	virtual std::string GetName() { return "Entity"; }
-	void GetClassName() override    //实现基类的纯虚函数
+	float x, y;
+
+	Vector2 operator+(const Vector2& other) const   //重载+，后面的const是为了保证生成一个Vector2对象并返回
 	{
-		std::cout << "Entity" << std::endl;
+		return Vector2({ x + other.x, y + other.y });
+	}
+
+	Vector2 operator*(const Vector2& other) const   //重载*，后面的const是为了保证生成一个Vector2对象并返回
+	{
+		return Vector2({ x * other.x, y * other.y });
+	}
+
+    bool operator==(const Vector2& other) const //重载==
+	{
+		return (x == other.x) && (y == other.y);
+	}
+
+	bool operator!=(const Vector2& other) const //重载!=
+	{
+		return (x != other.x) || (y != other.y);
 	}
 };
 
-class Player : public Entity    //只需要继承Entity，不用继承Printable
+std::ostream& operator<<(std::ostream& stream, const Vector2& other)    //重载<< 一定要返回std::ostream&
 {
-private:
-	std::string m_Name;
-public:
-	Player(std::string name)
-		: m_Name(name) {}
-
-	std::string GetName() override  //重写Entity中的GetName
-	{
-		return m_Name;
-	}
-
-	void GetClassName() override    //实现基类的纯虚函数
-	{
-		std::cout << "Player" << std::endl;
-	}
-
-};
-
-void Print(Printable* obj)
-{
-	obj->GetClassName();
+	stream << other.x << ", " << other.y;
+	return stream;
 }
 
 int main()
 {
-    //Printable a = new Printabel();    //报错，无法实例化
-	Entity* b = new Entity();   //Entity实现了基类纯虚函数可以实例化
-	Print(b);   //输出Entity
-
-	Player* p = new Player("name");
-    //如果Player还继承了Printable类，需要表明是public继承，否则下面的代码会报错，虽然不会影响实际执行，但是我也不知道为什么。且需要实现GetClassName方法，不然无法实例化
-    //如果仅继承Entity类，若Player类中并没有实现GetClassName，则会调用Entity类中的GetClassName，能够实例化
-
-	Print(p);   //若继承了Printable，则必须实现GetClassName
-                //此时输出name
-                //若仅继承Entity，若不实现GetClassName，则输出Entity，若实现GetClassName，则输出Player
-
+	Vector2 position = { 1.0f, 2.0f };
+	Vector2 speed = { 1.0f, 3.0f };
+	std::cout << position + speed << std::endl;
+	std::cout << position * speed << std::endl;
+    std::cout << (position == speed) << std::endl;
+	std::cout << (position != speed) << std::endl;
+    //一定要加()，否则会调用Vector2重载的<<方法
 }
 ```
