@@ -145,6 +145,47 @@
         return a * b;
     }
     ```
+- **静态链接**
+  - 在生成exe时，便会在编译链接时将所有需要的文件包含到exe中
+  - 在项目属性的c++常规的附加包含目录中，输入外部文件的头文件所在的路径
+  - 在项目属性的链接器的输入中，输入外部文件的需要调用的.lib文件
+
+- **动态链接**
+  - 在运行的过程中才会调用.dll文件，这需要我们将.dll文件置于exe文件的同级目录下
+  - 头文件是通用的，即无论是静态链接还是动态链接，都是用同一个头文件，因此只需要输入外部文件的头文件所在路径即可
+  - 在项目属性的链接器的输入中，输入外部文件的需要调用的文件名中含有dll的.lib文件
+  - 此时便可通过编译，但是无法运行，必须将需要调用的.dll文件置于.exe所在的文件夹之中
+
+- **自建library与项目链接**
+  - 首先创建一个项目`CPP_Series`，然后右键项目解决方案添加新项目`Engine`，这样就可以获得两个项目，新建的项目作为自建library，输出.lib文件，为项目静态链接提供文件
+  - 在`Engine`中分别创建`Engine.h`和`Engine.cpp`；而在`CPP_Series`的main函数需要调用`Engine`；此时可以通过以下代码调用
+    ```
+    #include"../../Engine/src/Engine.h" //没有添加附加包含目录时的写法
+
+    #include"Engine.h"  //添加附加包含目录后的写法
+
+    //此时能够编译成功，但是无法运行，因为链接并没有成功
+
+    //一种方法是，先编译Engine得到.lib文件，
+    //然后需要在链接器常规的附加库目录中写入.lib文件所在的路径，
+    //否则会报无法打开文件的错
+    //采用上面所写的静态链接的方法输入需要调用的Engine.lib，
+    //(实验发现，不写Engine.lib也能调用成功)
+
+    //另一种方法是，使用VS自带的引用功能，
+    //右键`CPP_Series`并选择添加模块中的引用模块，加入`Engine`
+    //但是和视频不同，我仍然需要在附加库目录中写入.lib文件所在的路径，
+    //否则会报无法打开.lib文件的错
+    //这种方法的好处：不用关心实际生成.lib的文件名，
+    //有时可能会更改文件名，导致重新添加
+    //(但好像也没啥问题吧，上面的方法不就可以不写文件名了么 呃呃)
+    //另外的好处就是，Engine成为了CPP_Series的依赖项，每次生成
+    //CPP_Series时，会自动编译Engine生成对应的.lib文件
+    int main()
+    {
+        Engine::PrintMessage();
+    }
+    ```
 
 ## 指针(pointer)
 - **原始指针(raw pointer):**
@@ -214,7 +255,18 @@
   - weak_ptr
     - 基本和shared_ptr功能类似，但是把shared_ptr赋值给weak_ptr，并不会增加引用次数`std::weak_ptr<Entity> = sharedentity1;`
     - 可以用来判断底层对象是否还活着，但不能保证底层对象一直存活
+- `->`操作符的用处：
+  - 当存在指针，但是需要访问其内部变量时，可以简化代码，例如:`Entity* ptr = new Entity();   std::cout << ptr->m_Name`
+  - 可以获取成员变量的偏移量，得到该类型的起始地址到该成员变量所在位置的偏移量
+    ```
+    struct Vector3
+    {
+        float x, y, z;  //float为4Bytes，所以偏移量分别为0,4,8
+    }
 
+    int offset = (int)&((Vector3*)nullptr)->x;   //offset=0
+    int offset = (int)&((Vector3*)0)->x;    //offset = 0
+    ```
 ## 引用(reference)
 - 与指针不同，引用必须引用一个已经存在的变量，本身不是变量不会占用内存空间，相当与给被引用对象创建了别名
 
@@ -330,7 +382,7 @@ int main()
   - 可以进行函数重载
   - 当不需要默认构造函数时，可以`class_name() = delete`
   - 直接调用类内静态函数或变量时，构造函数并不会被调用
-- 析构函数(destructor)：
+- **析构函数(destructor)**：
   - 对象生命周期结束后(销毁后)自动调用
   - 可以用来释放申请的内存空间
 - **继承(inheritance)**
@@ -552,6 +604,67 @@ int main()
     }
     ```
 
+- **拷贝构造函数**：
+  - 在进行=赋值时会调用拷贝构造函数，类似`class_name(const class_name& other);`
+  - 浅拷贝：仅拷贝成员变量，即把被拷贝的对象的成员变量拷贝到新对象的对应的成员变量中。例如：`int a = b, char* c = d`；若不需要拷贝，直接将其`=delete`即可
+    ```
+    class Entity
+    {
+    private:
+        char* m_Buffer;
+        int m_Size;
+    public:
+        Entity(const char* str)
+        {
+            m_Size = strlen(str);
+            m_Buffer = new char[m_Size + 1];
+            memcpy(m_Buffer, str, m_Size);
+            m_Buffer[m_Size] = 0;   //防止传入的str没有空终止符，手动添加
+        }
+
+        ~Entity()
+        {
+            delete[] m_Buffer;
+        }
+
+        char& operator[](unsigned int index)
+        {
+            return m_Buffer[index];
+        }
+
+        friend std::ostream& operator<<(std::ostream& stream, const Entity& e);     //友元，可以访问私有变量
+    }
+
+    std::ostream& operator<<(std::ostream& stream, const Entity& e)
+    {
+        stream << Entity.m_buffer
+        return stream;
+    }
+
+    int main()
+    {
+        Entity a("name");   //a.m_Buffer指向"name"的内存空间
+        Entity b = a;       //由于是浅拷贝，b.m_Buffer同样指向"name"的内存空间
+        std::cout << a << std::endl;    //输出"name"
+        std::cout << b << std::endl;    //输出"name"
+
+        b[2] = 'b';     //两次均输出"nabe"
+
+        //最后会发生崩溃，因为同一个内存空间被delete两次，这是不允许的
+    }
+    ```
+  - 深拷贝：当成员变量中存在指针时，并且该指针指向一个堆上的内存空间。进行拷贝，则会按照要求在堆上重新申请一个内存空间给新对象，防止新对象与被拷贝对象的指针指向同一块内存空间，导致进行delete的时候出现碰撞，或者防止新对象修改内容时，将被拷贝对象的内容一起修改
+    ```
+    //只需要重写一个拷贝构造函数实现深拷贝即可
+    Entity(const Entity& other)
+        : m_Size(other.m_Size)
+    {
+        m_Buffer = new char[m_Size + 1];
+        memcpy(m_Buffer, other.m_Buffer, m_Size + 1);
+        //因为已经知道other中有一个空终止符，直接m_Size + 1
+    }
+    ```
+
 ## const
 - **常量指针**
   - 不能够通过解引用改变指针指向的那个值，但是能够改变指针指向的地址，即指针指向的值为常量，而指针本身是变量
@@ -734,3 +847,61 @@ int main()
     //一定要加()，否则会调用Vector2重载的<<方法
 }
 ```
+
+## vector
+- 创建一个vector，并push_back节点进入，如果vector的容量不支持push进一个新的节点，即vector.size() == vector.capacity()，便会进行一次扩展；主要步骤就是申请一个新的内存空间足以存放新的节点，并将旧vector中的内容全部复制到新的内存空间中，再删除旧的vector，然后push新的节点，以此循环；**当vector需要复制的数据过大时，会带来很大的性能开销和时间浪费** 
+    ```
+    struct Vector3
+    {
+        float x, y, z;
+
+        Vector3(float x, float y, float z)
+            : x(x), y(y), z(z)
+        {}
+
+        Vector3(const Vector3& other)
+            : x(other.x), y(other.y), z(other.z)
+        {
+            std::cout << "copied!" << std::endl;
+        }
+    };
+
+    int main()
+    {
+        std::vector<Vector3> vertices;
+        //push_back必须传入的是对象
+        vertices.push_back(Vector3({ 1, 2, 3 }));
+        //输出一次copied!
+        vertices.push_back({ 4, 5, 6 });
+        //输出两次copied!
+        vertices.push_back({ 7, 8, 9 });
+        //输出三次copied!
+
+        //共输出6次copied!，
+        //第一次是因为实例化了一个Vector3类，并将其复制进vertices
+        //第二次是因为实例化了一个Vector3类，并将其复制进vertices，
+        //此外，由于vertices的capacity不够，进行了扩容，
+        //将原先有vertices中的复制到新的vertices
+        //第三次同上有一次复制，另外这次vertices中已经有两个Vector3，需要复制两次
+        std::cin.get();
+    }
+    ```
+  - **优化方法**
+    - vector一开始分配的capacity为1，当需要push多组数据时，会发生多次扩容，导致产生不必要的复制。如果事先知道需要存储的数据的大小，可以提前分配需要的空间，减小不必要的复制扩容
+        ```
+        vector<Vector3> vertices;
+        vertices.reserve(3);
+        // 不能够使用以下代码进行初始化
+        // vector<Vector3> vertices(3);
+        ```
+    - push数据时，使用push_back会不可避免的出现复制情况，可以使用emplace_back代替，可以不用复制，而是直接传入数据；以下方法可以完全去除push三个数据节点时会产生的复制现象
+        ```
+        std::vector<Vector3> vertices;
+        vertices.reserve(3);
+        vertices.emplace_back(1, 2, 3);
+        vertices.emplace_back(4, 5, 6);
+        vertices.emplace_back(7, 8, 9);
+        //不能使用vertices.emplace_back({1, 2, 3})
+        //这本质上还是先创建了Vector3的对象然后在push，仍然会导致复制的产生
+        //更何况，这编译根本过不去
+        ```
