@@ -751,16 +751,7 @@ a = &b; //报错
                                     //如果是值传递，输出8
     ```
 
-## new关键字
-- new是一个操作符，类似于+，-，可以实现重载
-- 在堆上分配足够的内存来存储，同时调用对应的构造函数
-- 通常使用new会调用底层的c函数`malloc`
-- 使用new后，一定要delete，否则会造成内存泄漏；如果使用了new class_name[]，则必须要使用delete[]
-  ```
-  Entity* entity0 = new Entity();   //调用构造函数
-  Entity* entity1 = (Entity*)malloc(sizeof(Entity)) //不调用构造函数
-  //在c中不需要将类型转换为Entity*，但是在c++中需要转换
-  ```
+
 
 ## 隐式转换
 - 仅进行一次转换，但是和视频p40不同，现在好像const char[]不会隐式转换为string了
@@ -905,3 +896,152 @@ int main()
         //这本质上还是先创建了Vector3的对象然后在push，仍然会导致复制的产生
         //更何况，这编译根本过不去
         ```
+
+## 返回多值
+- 如果类型相同，可以使用vector或arrary进行存储后返回，不要忘记了使用new，否则会返回空的值
+- 如果类型不同，可以使用tuple，在返回时直接使用make_tuple即可；或者可以自己建立struct，可以通过更方便更易读的方式调用，例如:`source.VertexSource`，一目了然
+    ```
+    #include<tuple>
+    #include<string>
+    #include<iostream>
+
+    std::tuple<std::string, std::string, int> Returntuple()
+    {
+        return std::make_tuple("age", "is", 10);
+    }
+
+    int main()
+    {
+        auto tuple_test = Returntuple(); 
+        std::cout << std::get<0>(tuple_test) << std::endl;
+        //获得0号索引出的内容
+    }
+    ```
+
+## 模板（template）
+- 模板可以减少代码的重载过程，减少代码重复
+- 模板只有在我们需要调用它时，才真正存在，因此，即使模板函数有编译错误，只要该模板函数没有被调用，仍能够通过编译
+- 可以提高创建类的灵活性
+    ```
+    template<typename T, int N>
+    class Array
+    {
+    private:
+        T m_Array[N];   //可以指定类型，还能够根据需求创建指定
+                        //大小的数组，原先直接编写，是无法传入
+                        //可变大小的N的
+    public:
+        int GetSize() const { return N; }
+    }
+
+    int main()
+    {
+        Array<int, 5> arrayi;
+        Array<std::string, 50> arrays;
+    }
+    ```
+## 堆（heap）、栈（stack）
+在堆和栈上分配空间会有较大的时间开销差距，在栈上分配空间可以进行快速分配，而在堆上需要经历调用`malloc`、访问free list、记录实际使用大小等一系列操作，更加耗时
+- 栈通常是具有预定义大小的区域，大约2MB
+  - 会先存储在高地址区域，然后随着栈中数据的增加，存储的内存地址会逐渐减小
+  - 因为会把数据分配到一起，所以分配起来比较快；在存储完数据后，移动栈指针就可以得到下一个可以分配的区域
+- 堆也有预定义的大小，但是可以随着应用程序而增长和更改，需要使用new关键字申请空间，然后使用delete释放空间
+  - 存储数据时，可以存储到不同的内存区域
+  - **new关键字**
+    - new是一个操作符，类似于+，-，可以实现重载
+    - 在堆上分配足够的内存来存储，同时调用对应的构造函数
+    - 通常使用new会调用底层的c函数`malloc`
+    - 使用new后，一定要delete，否则会造成内存泄漏；如果使用了new class_name[]，则必须要使用delete[]
+    - 存在一个free list会实时记录哪块儿内存块空闲以及它们的位置，当进行new操作时，便会寻找合适的内存块进行分配
+      ```
+      Entity* entity0 = new Entity();   //调用构造函数
+      Entity* entity1 = (Entity*)malloc(sizeof(Entity)) //不调用构造函数
+      //在c中不需要将类型转换为Entity*，但是在c++中需要转换
+      ```
+
+## 宏（Macros）
+- 在预处理阶段，可以让编译器使用实际代码对宏进行替换操作，简化代码复杂度，同时提高易读性。但是不能过度使用宏，会导致不了解该项目的人很难理解，反而降低阅读性。
+- 当宏定义在其他文件中，而该文件中使用了宏，则会导致阅读障碍，需要去寻找对应的宏定义，同时，若不包含宏定义所在的头文件，会导致编译失败
+    ```
+    #define WAIT std::cin.get() //替换时已经有;，此处便不用加;
+    #define LOG(x) std::cout << x << std::endl;
+    int main()
+    {
+        WAIT;   //预处理时便会替换成std::cin.get()
+        LOG("Hello");
+    }
+    ```
+- 可以通过宏定义选择在Debug模式以及Release模式下使用不同的宏，例如：Debug模式下可能有一些日志输出，而Release模式下只需要程序正常执行即可，可以通过更改项目Debug模式和Release模式下，在预处理器定义中编写指定代码并结合#ifdef来选择是否让程序获得对应的宏
+    ```
+    //首先在Debug模式下，预处理器定义中输入PR_DEBUG
+    //在Release模式下，预处理器定义中输入PR_RELEASE
+
+    #ifdef PR_DEBUG //使用Debug模式，便输出日志
+    #define LOG(x) std::cout << x << std::endl;
+    #else   //使用Release模式便不输出，提高性能
+    #define LOG(x)  //相当于代码中的LOG(x)被删除了
+    #endif
+    ```
+- 一般宏定义只能在一行，但是可以通过宏定义多行代码，每次换行前需要输入`\`作为转义符
+    ```
+    #define MAIN int main() \
+    {\
+        std::cin.get(); \
+    }
+
+    MAIN
+    ```
+## 函数指针和lamda
+**函数指针**
+- 可以获取函数在内存中的地址，但是不能够添加括号。可以不加取地址符`&`，会有隐式转换。例如:`auto f = &function;`此处的funciton是无参数函数，且返回类型为void，此处的auto相当于`void(*f)`，即相当于`void(*f)() = function;`或者
+    ```
+    typedef void(*f)();
+    f func = function;
+    func();
+    ```
+- 当函数有参数时，只需要添加对应类型即可
+    ```
+    typedef void(*f)(int);
+    f func = function;
+    func(2);
+    ```
+- 可以将函数指针以参数的形式传到别的函数中去，适用于lamda表达式
+
+**Lamda表达式**
+- lamda表达式中的[]表示需要捕获的内容，
+  - [a, &b]中a表示复制捕获，而b则是**引用**捕获，
+  - [this]表示使用引用捕获当前对象，
+  - [&]表示使用**引用**自动捕获lamda表达式中出现的所有变量和对象
+  - [=]表示使用**复制**自动捕获lamda表达式中出现的所有变量和对象
+  - []表示不捕获
+- 将函数指针与lamda表达式相结合，lamda表达式更像是一次性的函数
+    ```
+    //[],不使用捕获时，可以写成如下
+    void ForEach(const std::vector<int>& values, void(*func)(int))
+    {
+        for(int& value : values)
+        {
+            func(value);
+        }
+    }
+
+    //使用捕获时，需要写成如下
+    #include<functional>
+    void ForEach(const std::vector<int>& values, const std::function<void(int)>& f)
+    {
+        ......
+    }
+
+    int main()
+    {
+        std::vector<int> values = {1, 5, 2, 3, 4};
+        ForEach(values, [](int value){ std::cout << "Value is " << value << std::endl;});
+    }
+    ```
+- 在lamda表达式的参数列表后面添加限定符，例如：添加`mutable`，就可以在lamda的函数体中改变捕获得到的变量，否则无法修改
+- 在某些特定需求下，可以编写lamda表达式并与部分std算法结合快速得到想要的结果
+    ```
+    #include<algorithm>
+    auto it = std::find_if(values.begin(), values.end(), [](int value){return value > 3;});
+    //可以快速返回values中第一个大于3的元素的迭代器
+    ```
