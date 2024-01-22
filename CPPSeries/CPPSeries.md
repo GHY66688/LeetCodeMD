@@ -1045,3 +1045,260 @@ int main()
     auto it = std::find_if(values.begin(), values.end(), [](int value){return value > 3;});
     //可以快速返回values中第一个大于3的元素的迭代器
     ```
+
+## 线程(thread)
+- 线程可以进行阻塞，但是在恢复后会在之前运行的基础上继续运行，不会重复运行
+- 所有代码都会在线程上运行，如果不创建线程，则所有函数都会在main相对应的线程上运行
+- 需要将线程完全运行完毕，否则会报错，因为直接关闭了该线程。
+- 当线程完全运行完毕后，不能够再使用join函数，会报错
+    ```
+    #include<thread>
+
+    static bool th_finished = false;
+
+    void Print()
+    {
+        std::cout << "thread started" << std::endl;
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
+        using namespace std::literals::chrono_literals;
+        while (!th_finished)
+        {
+            std::cout << "Working" << std::endl;
+            std::this_thread::sleep_for(1s);		//休息1s后继续执行
+        }
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
+        std::cout << "thread finished" << std::endl;
+    }
+
+    int main()
+    {
+        std::thread worker(Print);	//创建线程，并直接开始运行
+
+        std::cin.get();			//按下enter，让该线程阻塞等待
+        th_finished = true;
+
+        worker.join();		//让该线程重新加入，在之前的基础上继续执行
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl; 
+        //main在不同的线程上运行，有不同的id
+
+        //th_finished = false;
+        //worker.join();    //报错，因为该线程已经执行完了
+        std::cin.get();
+    }
+    ```
+
+## 计时(Time)
+- 使用`chrono`库来获得时间，在对应的地方设置获得时间的方法，并经过简单计算即可得到运行指定代码所需时间
+- 以下代码几乎可以在所有平台使用
+    ```
+    #include<chrono>
+    int main()
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        .....code....
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float> duration = end - start;
+        std::cout << duration.count() << "s" << std::endl;
+    }
+    ```
+- 可以利用函数的生命周期来简化上述代码，通过创建一个Timer类，在构造该对象时自动记录start，而当该对象超出生命周期后便会调用析构函数，自动记录end并计算打印duration
+    ```
+    struct Timer    //Timer类，利用对象生命周期记录时间
+    {
+        std::chrono::time_point<std::chrono::steady_clock> start, end;
+        std::chrono::duration<float> duration;
+
+        Timer()
+        {
+            start = std::chrono::high_resolution_clock::now();
+        }
+
+        ~Timer()
+        {
+            end = std::chrono::high_resolution_clock::now();
+            duration = end - start;
+
+            float ms = duration.count() * 1000.0f;
+            std::cout << ms << "ms" << std::endl;
+        }
+    };
+
+    void Print()
+    {
+        Timer timer;
+        for (int i = 0; i < 100; ++i)
+        {
+            std::cout << "Hello" << std::endl;
+            //std::endl会相对耗时，改为Hello\n可以节省部分时间
+            //但是时间有波动，需要多测几次，此外，Debug和Release模式耗时也不同
+        }
+    }
+
+    int main()
+    {
+        Print();
+    }
+    ```
+
+## 多维数组
+- 实际上就是数组的数组。。。，一般创建n维数组，就需要以下代码$class\_name^{*^n} array$，实际存储的就是指向class_name的指针的指针的指针...以此循环；即创建n维指针
+- `int** a2d = new int*[50];`，a2d[i]存储的其实是对应的数组的指针(地址)，并且一共存储了50个这样子的指针；如果a2d[i]所指向的数组有50个元素，即`a2d[i] = new int[50];`，则整个a2d数组一共有2500个数
+- 进行删除时，不能够使用语法`delete[][] a2d`，必须遍历，每次删除`delete[] a2d[i]`，然后再`delete[] a2d`；否则会造成内存泄漏
+- 使用以上方式创建出来的多维数组，只有最后一维的数组是连续的，即创建的a2d数组，a2d[i][j+1]与a2d[i][j]是在一起的，但是a2d[i]和a2d[i+1]是不在一起的，可能相去甚远；换句话说，数组中的行与行在内存中并不紧邻；这可能会导致缓存命中率过低，最终导致运行缓慢
+- 将多维数组在物理上组合成一维数组。而在逻辑上保留多维的概念可以将整个数组存储在一片连续的内存空间中，提高访问速度和cache命中率
+    ```
+    int * a2d = new int[5 * 5];
+    for(int i = 0; i < 5; ++i)
+    {
+        for(int j = 0; j < 5; ++j)
+        {
+            a2d[i * 5 + j] = 2;
+        }
+    }
+    ```
+
+## sort
+- 能够根据迭代器和给定的规则对数据进行排序；默认小于，即小的排前边
+- 能够使用`functional`中的`greater<class_name>()`，做到倒序排序，即大的排前边
+- 插入lamda表达式，实现根据自己的想法进行排序
+    ```
+    int main()
+    {
+        std::vector<int> values = { 1, 5, 3, 8, 6 };
+        
+        //默认是升序排序
+        //std::sort(values.begin(), values.end());
+
+        //倒序排序 
+        //std::sort(values.begin(), values.end(), std::greater<int>());
+
+        //如果返回true就是a排在前面，b排在后面 反之亦然
+        std::sort(values.begin(), values.end(), [](int& a, int& b) { return a > b; });
+
+        for (auto& value : values)
+        {
+            std::cout << value << std::endl;
+        }
+    }
+    ```
+
+## 类型双关(type punning)
+- 将同一块内存中的数据通过不同类型的指针读取出来
+    ```
+    struct my_struct
+    {
+        int x, y;
+    };
+
+    int main()
+    {
+        int a = 5;
+        double value = a;   
+        //value占8个字节，但是存储方式不同，
+        //导致value的前四个字节与a的四个字节存储的数据不同
+        &a: 05 00 00 00
+        &value: 00 00 00 00 00 00 14 40
+
+        //现在想要value的前四个字节存储的数据与a的相同
+        //即&value : 05 00 00 00 cc cc cc cc
+        double& value = *(double*)&a;
+        //先取a的地址，然后将int*转换为double*再解引用
+        //使用引用，value地址与a相同
+
+        my_struct a = { 5, 8 };
+
+        int* position = (int*)&a;
+	    std::cout << position[0] << ", " << position[1] << std::endl;
+        //获得a的地址并将其转换为数组，由于是数据是int型，每次
+        //向后移动4个Bytes
+
+
+        double y_d = *(double*)((char*)&a + 4);
+        //通过(char*)&a + 4，计算a.y的地址，因为int是四个字节
+        //再转换成double指针，并赋值
+        //此时 &y_d:08 00 00 00 cc cc cc cc (应该是这样的)
+
+        int x = y_d;
+        //直接强转，会出现精度丢失
+        //&x:00 00 00 80
+
+        int y = *(int*)&y_d;
+        //转换为int指针，避免精度丢失
+        //&y:08 00 00 00
+        std::cout << y << std::endl;
+    }
+    ```
+
+##Union
+- 类似于struct，但是struct以及class会随着成员的增多而扩大，例如有四个int型成员，则需要占据16Bytes；而Union只有一个成员，如果声明abcd四个变量，但是它们都是指同一块内存空间，只要更改了a的值，那么其他三个变量的值也会相应改变
+- 往往使用union是与type punning相关联的
+    ```
+    int main()
+    {
+        struct Union
+        {
+            union
+            {
+                float a;
+                int b;
+            };
+        };
+
+        Union c;
+        c.a = 2.0f;
+        std::cout << c.a << ", " << c.b << std::endl;
+        //&c: 00 00 00 40
+        //分别用float和int进行读取，得2，1073741824
+    }
+    ```
+- 通过合理的设置union可以减少对象的创建并提高性能；可以用多个名称去代表同一块内存空间，例如：x,y,z和R,G,B都指向同一个空间，以后便可以用合适的变量名去指代
+    ```
+    struct Vector2
+    {
+        float x, y;
+    };
+
+    struct Vector4
+    {
+        union   //union中的所有成员都享有同一块内存空间
+        {       //但是成员内部的定义不会共享空间
+            struct
+            {
+                float x, y, z, w;   //x,y,z,w分别享有不同的内存空间
+            };
+            struct
+            {
+                Vector2 a, b;   //a和x,y享有相同空间
+            };                  //b和z,w享有共同空间
+        };
+
+        //float x, y, z, w;
+
+        //Vector2& GetV2()
+        //{
+        //    return *(Vector2*)&y; //使用type punning
+        //}                         //为了不进行复制
+
+        //Vector2& GetV2()
+        //{
+        //    return {y, z};      //会进行复制操作
+        //}
+    };
+
+    void PrintVector2(const Vector2& v)
+    {
+        std::cout << v.x << ", " << v.y << std::endl;
+    }
+
+    int main()
+    {
+        Vector4 v4 = { 1.0f, 2.0f, 5.0f, 6.0f };
+        //PrintVector2(v4.GetV2()); //输出2,5
+        PrintVector2(v4.a); //输出1,2
+        PrintVector2(v4.b); //输出5,6
+        std::cout << "-----------------------------\n";
+        v4.x = 5000.0f;
+        PrintVector2(v4.a); //输出5000,2
+        PrintVector2(v4.b); //输出5,6
+    }
+    ```
