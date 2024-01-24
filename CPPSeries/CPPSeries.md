@@ -450,6 +450,42 @@ int main()
     }
 
     ```
+
+- **虚析构函数**
+  - 一个基类A，派生类B，创建了类别B的对象b，但是我需要将其引用成类别A；当需要进行删除时，需要调用类别B的析构函数而不是类别A的析构函数
+  - 不是覆写一个析构函数，而是加上一个析构函数
+  - 通过将基类A的析构函数加上`virtual`可以告诉编译器在调用该虚析构函数之前还有可能需要调用派生类的析构函数，如果有的话
+    ```
+    class Base
+    {
+    public:
+        Base(){std::cout << "Base Constructor" << std::endl;}
+        virutal ~Base(){std::cout << "Base Desturctor" << std::endl;}       //虚析构函数
+    };
+
+    class Derived : public Base
+    {
+    Public:
+        Derived(){my_array = new int[50]; std::cout << "Derived Constructor" << std::endl;}
+        ~Derived(){delete my_Array; std::cout << "Derived Destructor" << std::endl;}
+    private:
+        int* my_array;
+    };
+
+    int main()
+    {
+        Base* base = new Base();    //调用Base的构造函数
+        delete base;                //调用Base的析构函数
+        std::cout << "------------------\n";
+        Derived* derived = new Derived();   //调用Base、Derived的构造函数
+        delete derived;     //调用Derived、Base的析构函数
+        std::cout << "------------------\n";
+        Base* a = new Derived();
+        delete a;
+        //不使用虚析构函数，只会调用Base的构造函数，Derived的构造函数以及Base的析构函数
+        //使用虚析构函数后，会调用Base的构造、Derived的构造以及Derived的析构和Base的析构
+    }
+    ```
 - **接口(interface)**
   - 创建一个只包含未实现方法然后交由子类去实现的类称为接口；在其他语言中有`interface`关键字声明是接口，但在c++中接口其实就是一个只有纯虚函数的类
   - 纯虚函数：允许我们定义一个在基类中没有实现的函数，强制子类去实现
@@ -915,7 +951,23 @@ int main()
         auto tuple_test = Returntuple(); 
         std::cout << std::get<0>(tuple_test) << std::endl;
         //获得0号索引出的内容
+
+        //也可以使用以下方法读取
+        std::string s1;
+        std::string s2;
+        int age;
+        std::tie(s1, s2, age) = Returntuple();
+
+        //但是不能直接读取，例如tuple.s1;
     }
+    ```
+- **结构化绑定(structured bingding)**
+  - 仅针对**c++17**；能够帮助我们更好的处理多返回值
+  - 是在tuple和pair，std::tie的基础上发展而来的，或者通过创建结构体实现读取；但是当一种结构体只被使用一次，且仅仅是为了传输多个返回值，可以使用该特性进行替换，保持代码简洁
+    ```
+    //使用结构化绑定，无需定义s1, s2, age
+    //一定要使用c++17及以上
+    auto[s1, s2, age] = Returntuple();
     ```
 
 ## 模板（template）
@@ -1111,6 +1163,7 @@ int main()
         Timer()
         {
             start = std::chrono::high_resolution_clock::now();
+            //auto start_us = std::chrono::time_point_cast<std::chrono::microseconds>(start).time_since_epoch().count();  //单位为微秒(us)（long long类型）
         }
 
         ~Timer()
@@ -1232,6 +1285,7 @@ int main()
 ##Union
 - 类似于struct，但是struct以及class会随着成员的增多而扩大，例如有四个int型成员，则需要占据16Bytes；而Union只有一个成员，如果声明abcd四个变量，但是它们都是指同一块内存空间，只要更改了a的值，那么其他三个变量的值也会相应改变
 - 往往使用union是与type punning相关联的
+- union实际占用空间以其中占用空间最大的类型计算，例如:union中既有int(4B)，又有double(8B)，则union的大小为8B
     ```
     int main()
     {
@@ -1300,5 +1354,260 @@ int main()
         v4.x = 5000.0f;
         PrintVector2(v4.a); //输出5000,2
         PrintVector2(v4.b); //输出5,6
+    }
+    ```
+
+## 类型转换(casting)
+- C语言风格类型转换，`(type_name)variable`，例如：`double b = 5.25; int a = (int)b;`
+- C++风格类型转换
+  - 无法做到C语言风格类型转换做不到的事，实际上就是在C语言风格类型转换的基础上加了一些语法糖
+  - 帮助程序员更好地阅读代码；减少尝试强制类型转换时可能会意外犯的错
+  - static_cast:
+  - reinterpret_cast:
+    - 将现有内存解释成另外一种类型，可以实现类型双关(type punning)
+  - dynamic_cast:
+    - 如何做到的：存储了运行时类型信息(runtime type information,RTTI)；会增加开销，但是能够允许我们使用dynamic_cast，换句话说：**如果想使用dynamic_cast，就必须打开RTTI**；可以关闭RTTI，如下图所示：
+    ![img](./CPP_image/RTTI_setting.png)
+    - 在运行时进行计算
+    - 可用于将基类转换为派生类，或将派生类转换为基类
+    - 将实际属于Enemy类的对象使用dymanic_cast转换为Player类，则会失败，返回NULL指针
+    - 可以用来检测对象是否属于某一类，如果不是则返回NULL；如果是则返回指向对象的指针
+    - 运行时进行类型转换，被转换的类必须包含多态类类型，即有虚表(虚函数)
+    ```
+    class Entity
+    {
+    public:
+        virtual void PrintName() {}
+    };
+
+    class Player : public Entity
+    {
+    };
+
+    class Enemy : public Entity
+    {
+    };
+
+    int main()
+    {
+        Player* player = new Player();
+        Entity* actuallyPlayer = player;
+        Entity* actuallyEnemy = new Enemy();
+
+        //强转，但是如果此时Enemy类与Player类的函数不同，成员
+        //变量不同，则会导致程序出错甚至崩溃
+        Player* p0 = (Player*)actuallyEnemy;
+        Player* p1 = static_cast<Player*>(actuallyEnemy);
+        
+        //需要让基类有虚表才能够使用dynmaic_cast，即创建虚函数
+        //运行时转换类型，检测到类别不同，返回NULL
+        Player* p2 = dynamic_cast<Player*>(actuallyEnemy);
+
+        //类别相同，返回对应指针
+        Player* p3 = dynamic_cast<Player*>(actuallyPlayer);
+    }
+    ```
+  - const_cast:
+    - 添加和移除const修饰符
+
+## 预编译头文件(precompiled header，PCH)
+- 一般用于大型项目中
+- 抓取一堆头文件，并将其转换为编译器可直接使用的格式，而不必一次又一次读取这些文件
+- 正常使用时，如果有多个cpp文件均包含了同一个头文件，则在编译时，编译器会将头文件中的内容全部复制到对应的cpp文件中并进行编译，这会导致每一个cpp文件都会编译一次该头文件；而当对某个cpp文件进行更改后再进行编译，又会重新编译一次头文件；以上均会增加编译时间
+- 实际上就是一个头文件，会接受其他的头文件，并仅编译一次后，这些数据就会以二进制的形式供编译器直接使用；其他cpp文件包含部分头文件时，则可以跳过头文件的编译过程，节约时间
+- 可以把标准库的头文件、自己写的头文件放进去；但是不要把经常需要改动的文件放入，频繁编译PCH会增加编译时间
+- 应该放一些大部分cpp文件都会用到的头文件，例如std
+- 缺点：由于每一个cpp都需要包含PCH，但是并不知道cpp文件实际调用的是PCH中的哪部分头文件；会影响可读性
+- 建立方式：
+  - Visual Studio：建立`pch.h`文件，将需要的头文件全部include到该该头文件中，并建立`pch.cpp`文件，只需包含`pch.h`头文件;
+    右键项目属性，如下图设置(可以让该项目下其他cpp文件全部使用如下配置)
+    ![img](../CPPSeries/CPP_image/precompiled_project.png)
+    右键`pch.cpp`属性，如下图设置(预编译头文件可以删除)
+    ![img](./CPP_image/precompiled_header.png)
+    测试编译时间：工具->选项->项目与解决方案->...如下设置
+    ![img](./CPP_image/precompiled_timer.png)
+    使用预编译头初次编译：2175 毫秒
+
+    使用预编译头二次编译：449 毫秒
+
+    不使用预编译头初次编译：2984 毫秒
+
+    不使用预编译头二次编译：1577 毫秒
+  - g++：
+    ```
+    g++ -std=c++11 pch.h    //预编译头
+    g++ -std=c++11 Main.cpp //执行main函数
+    ```
+
+## 基准测试(benchmark)
+- 一定要在Release模式下进行测试，因为编译器不会添加额外的Debug代码，能够获得更准确的测试数据
+- `make_shared<class_name>()` 往往比 `shared_ptr<class_name>(new class_name())`更快
+- `make_unique<class_name>()`往往比`make_shared<class_name>()`更快
+
+## C++17特性
+**optional数据**
+- 在程序中数据可能有时会存在，而有时又不存在；例如：读取文件，若该文件无法读取该采取何种措施
+- **c++17**引入的新特性
+    ```
+    #include<optional>
+    std::optional<std::string> ReadFileAsString(const std::string& filepath)
+    {
+        std::ifstream stream(filepath);
+        if (stream)
+        {
+            std::string result;
+            //read file
+            stream.close();
+            return result;
+        }
+        return {};	//{}是std::optional
+    }
+
+    int main()
+    {
+        auto data = ReadFileAsString("a.txt");
+        if (data.has_value())	
+        //此处也可以直接使用data,因为有一个bool运算符
+        {
+            //std::string& str = *data;	//直接访问字符串
+            //std::string& str = data.value();	//同上
+            std::string str = data.value_or("not that");
+            //如果读取失败可以使用默认值"not that"
+            //因为有常量字符，不能使用引用
+            std::cout << "Read File Successfully" << std::endl;
+        }
+        else
+        {
+            std::cout << "File could not be opened " << std::endl;
+        }
+    }
+    ```
+**单一变量存储多种类型的数据(std::variant)**
+- 列出可能的数据类型，例如:`std::variant<std::string, int>`数据就有可能是string或int
+- 与union类似，但是并不是同一块内存空间的解释类型不同。此外，union的内存空间是按其中成员类型的最大占用空间计算得来。而variant则是对每一个可能的类型都开辟了一个空间，**variant占用的内存空间为其所有数据类型的空间总和**；更像是建立了一个struct包含需要的成员类型
+- 相较于union更加安全，存储时的数据类型必须与读取时的数据类型一致，且数据类型不能够超出包含的范围
+    ```
+    #include<variant>
+    enum class FileNum
+    {
+        NONE = 0, NOT_FOUND = 1, NO_ACCESS = 2
+    };
+
+
+    std::variant<std::string, FileNum> ReadFileAsString(const std::string& filepath)
+    {
+        //如果读取文件失败可以返回相应的整数，相较于bool能够读取更多信息
+        return {};
+    }
+
+    int main()
+    {
+        std::variant<std::string, int> data;
+        std::cout << sizeof(int) << std::endl;  //输出4
+        std::cout << sizeof(std::string) << std::endl;  //输出28
+        std::cout << sizeof(data) << std::endl; //输出32
+
+        data = "Name";
+        std::cout << std::get<std::string>(data) <<std::endl;
+        //std::cout << std::get<int>(data) << std::endl;	//报错，类型不对
+
+        data = 2;
+        std::cout << std::get<int>(data) << std::endl;
+
+        std::cout << data.index() << std::endl;	//返回类型索引，输出1为int
+
+        /*data = false;		//类型不在内，则无法访问
+        std::cout << std::get<bool>(data) << std::endl;*/
+
+        auto value = std::get_if<std::string>(&data);	//返回指针，若为空则类型不对
+        //可以利用这个方法检测类型
+        if (auto value = std::get_if<int>(&data))
+        {
+            int str = *value;
+            std::cout << str << std::endl;
+        }
+    }
+    ```
+**单一变量存储任意类型的数据(std::any)**
+- 可以使用void，但是非常不安全
+- 一般不用这个东西，
+- 当类型的大小较小时，不会再次申请内存空间(p78视频里说是32B?)，当超过一定大小(32B?)会重新申请空间，较为费时
+- 对于存储小类型数据来说，工作方式与variant完全相同，如果是大类型，则会变成void*，然后动态申请空间
+    ```
+    #include<any>
+    int main()
+    {
+        std::any data = std::make_any<std::string>("Name");	//只能放一个值
+        data = "Name";	//const char*
+        std::string std = std::any_cast<const char*>(data);	//映射时必须类型一样
+    }
+    ```
+
+## 提高性能
+**多线程提高性能**
+- 实现并行需要找出代码之间的依赖关系，并清楚在不同的线程中存放合适的代码
+- 将串行的for循环变为并行的for循环，如果这些循环都是独立的话，即上一循环加载的内容并不会影响后续循环的加载；例如：加载同一个物品多次，或者加载互不相干的多个物体
+- C#中有现成的并行for循环库。但是C++没有(过分昂)
+    ```
+    #include<future>
+
+    //互斥锁
+    static std::mutex s_MeshesMutex;
+
+    void Load(const std::string& filepaht)
+    {
+        //load mesh
+    }
+
+    //Ref是用来保证vector中存储的都是Mesh类型的引用，节省空间
+    //复制filepath是因为在并行for循环中，传入的file在超出该作用域
+    //后便会消失，为了防止访问已被删除的内存而采用复制
+    static void LoadMesh(std::vector<Ref<Mesh>>* meshes, std::string filepath)
+    {
+        auto mesh = Load(file);
+
+        //锁定，防止其他线程修改meshes；
+        //此外， 该锁也会在离开作用域后自动解锁
+        //Lock_guard的析构函数会自动解锁
+        std::Lock_guard<std::mutex> lock(s_MeshesMutex);
+        meshes->push_back(mesh);
+    }
+
+    int main()
+    {
+        //void为异步调用的函数的返回值
+        std::vector<std::future<void>> m_Futures;
+
+        std::vector<std::string> filepaths;
+        //load filepaths
+        std::vector<std::string> m_Meshes;
+    //预处理，ASYNC为1则进行并行for循环
+    #define ASYNC 1
+    #if !ASYNC
+        //串行for循环，上一个加载完后，才会开始下一个加载
+        for(const auto& file : filepaths)
+        {
+            m_Meshes.push_back(Load(file));
+        }
+    #else
+        //并行for循环
+        for(const auto& file :filepaths)
+        {
+            //第一个参数是什么类型的job，
+            //如果不设置为launch::async，
+            //则可能不会在单独调用一个线程上工作，
+            //c++会根据当前工作负载来选择
+            //(可以在适当的地方使用，例如：加载压力较大的场景等)
+            //第二个参数是实际需要异步运行的函数
+            //后面的参数都是异步运行的函数的参数
+
+            //该函数会返回std::future，必须进行保留，如果不保留
+            //就会被摧毁，因此，保存返回值这一步只能串行for循环
+            //在每一次迭代中，以下函数都会在future的析构函数中，
+            //只要LoadMesh一结束就会直接析构
+            m_Futures.push_back(std::async(std::launch::async, LoadMesh, &m_Meshed, file));
+
+        }
+
     }
     ```
