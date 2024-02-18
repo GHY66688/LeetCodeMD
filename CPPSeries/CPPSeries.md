@@ -316,10 +316,13 @@
     }
     ```
 
-## 单例模式
-
-仅创建一个实例，并其生命周期为整个程序
-
+## 设计模式
+**单例模式(singletons)**
+- 仅创建一个实例，并其生命周期为整个程序
+- 构造函数和析构函数不能够被外部访问，防止实例化，需要将这两个函数置于private
+- 防止进行复制实例化，可以将拷贝构造函数删除
+- 单例模式核心便是`Get()`，使用简化版，则只会在第一次调用该函数时实例化一个对象
+- 使用namespace能够实现，但是namespace并没有public 和private等功能，同时也没有赋值给一个对象的能力
 ```
 class Singleton
 {
@@ -341,23 +344,36 @@ int main()
     Singleton::Get().Hello();
 }
 
-//简化版
+//简化版，在Get函数中静态实例一个对象，就无需在其他CPP文件中做以下声明了`Singleton Singleton::s_Instance;`
 class Singleton
 {
 public:
+    Singleton(const Singleton&) = delete;   //删除拷贝构造函数
+
     static Singleton& Get()
     {
-        static Singleton instance;  //将其生命周期延长至程序结束
+        static Singleton s_Instance;  //将其生命周期延长至程序结束
                                     //第一次调用会创建实例；之后不会
-        return instance;            //返回存在的唯一的一个实例
+        return s_Instance;            //返回存在的唯一的一个实例
     }
 
-    void Hello();
+    //能够使用Singleton.Hello()直接调用IHello()，
+    //不需要Singleton::Get().IHello()，当然这边IHello不能直接访问
+    //因为是private的
+    static void Hello() { return Get().IHello(); }
+private:
+    void IHello();
 };
+
+
 
 int main()
 {
     Singleton::Get().Hello();
+    //或者
+    Singleton& instance = Singleton::Get(); //必须使用引用
+    instance.Hello();
+
 }
 ```
 
@@ -1445,7 +1461,7 @@ int main()
 - `make_unique<class_name>()`往往比`make_shared<class_name>()`更快
 
 ## C++17特性
-**optional数据**
+**std::optional数据**
 - 在程序中数据可能有时会存在，而有时又不存在；例如：读取文件，若该文件无法读取该采取何种措施
 - **c++17**引入的新特性
     ```
@@ -1611,3 +1627,187 @@ int main()
 
     }
     ```
+**string优化**
+- 直接使用std::string来接收字面值常量会出现内存分配，此外，使用substr()等函数同样会导致内存分配情况的出现
+- 通过使用**c++17**引入的新特性`string_view`实现对原先字符串的访问，而非复制减少内存空间的分配
+    ```
+    static int s_AllocCount = 0;    //记录申请空间次数
+
+    void* operator new(size_t size)
+    {
+        s_AllocCount++;
+
+        //记录每次申请空间大小
+        std::cout << "Allocated " << size << " Bytes\n";
+        return malloc(size);
+    }
+
+    void PrintName(const std::string& str)
+    {
+        std::cout << str << std::endl;
+    }
+
+    void PrintName(std::string_view str)    //重载
+    {
+        std::cout << str << std::endl;
+    }
+
+    int main()
+    {
+        //共申请三次空间，每次8B
+        //std::string str = "Name Last";
+        //std::string firstname = str.substr(0, 4);
+        //std::string lastname = str.substr(4, 4);
+
+        //不申请空间；
+        //如果str是std::string类型，则后两句代码需要传入str.c_str()，作为指针传入
+        const char* str = "Name Last";
+        std::string_view firstname = std::string_view(str, 4);
+        std::string_view lastname = std::string_view(str + 4, 4);
+
+        PrintName(firstname);
+
+        std::cout << "allocated " << s_AllocCount << " epoch\n";
+    }
+    ```
+- c++标准库对于短字符串的实现并不是直接为其分配空间(堆分配)。当字符串的字符数小于等于15(**VS2019中**)时，会将该字符串分配到一个临时的静态栈缓冲区中(在debug模式下，仍然会分配，但是在release
+模式下则不会分配)
+
+## 跟踪内存
+- 通过重载new 和 delete 操作符，实现对内存分配数量的跟踪
+- 使用单例模式进行设计
+    ```
+    class AllocationMetrics
+    {
+    public:
+        AllocationMetrics() {}
+
+        AllocationMetrics(const AllocationMetrics&) = delete;
+
+        static AllocationMetrics& Get()
+        {
+            static AllocationMetrics s_allocationMetrics;
+            return s_allocationMetrics;
+        }
+
+        static uint32_t CurrentUsage()
+        {
+            return Get().ICurrentUsage();
+        }
+
+        static void AllocationPlus(size_t size)
+        {
+            Get().TotalAllocated += size;
+        }
+
+        static void AllocationMinus(size_t size)
+        {
+            Get().TotalFreed += size;
+        }
+
+    private:
+        uint32_t TotalAllocated = 0;
+        uint32_t TotalFreed = 0;
+        uint32_t ICurrentUsage()
+        {
+            return TotalAllocated - TotalFreed;
+        }
+
+    };
+
+    void* operator new(size_t size)
+    {
+        AllocationMetrics::Get().AllocationPlus(size);
+        return malloc(size);
+    }
+
+    void operator delete(void* memory, size_t size)
+    {
+        AllocationMetrics::Get().AllocationMinus(size);
+        free(memory);
+    }
+
+    static void printUsage()
+    {
+        std::cout << "Memory " << AllocationMetrics::CurrentUsage() << " bytes\n";
+    }
+
+    struct object
+    {
+        int x, y, z;
+    };
+
+    int main()
+    {
+        printUsage();
+        std::string str = "Name";
+        printUsage();
+        {
+            object* o = new object();
+            printUsage();
+
+            std::unique_ptr<object> a = std::make_unique<object>();
+            printUsage();
+        }
+    }
+
+    //使用struct实现单例模式
+    struct AllocationMetrics
+    {
+        uint32_t TotalAllocated = 0;
+        uint32_t TotalFreed = 0;
+        uint32_t CurrentUsage()
+        {
+            return TotalAllocated - TotalFreed;
+        }
+    };
+
+    AllocationMetrics s_AllocationMetrics;
+
+    void* operator new(size_t size)
+    {
+        s_AllocationMetrics.TotalAllocated += size;
+        return malloc(size);
+    }
+
+    void operator delete(void* memory, size_t size)
+    {
+        s_AllocationMetrics.TotalFreed += size;
+        free(memory);
+    }
+
+    void PrintMemoryUsage()
+    {
+        std::cout << "Memory " << s_AllocationMetrics.CurrentUsage() << " bytes\n";
+    }
+
+    struct object
+    {
+        int x, y, z;
+    };
+
+    int main()
+    {
+        PrintMemoryUsage();
+        std::string str = "Name";
+        PrintMemoryUsage();
+        {
+            std::unique_ptr<object> o = std::make_unique<object>();
+            PrintMemoryUsage();
+        }
+    }
+    ```
+
+## 左值(lvalue)右值(rvalue)与移动语义(move)
+- 左值绝大多数时候处于等式的左侧，而右值则处于右侧，例如`int i = 10`，其中i是左值，10是右值；右值无法给左值赋值，而左值可以给左值赋值(右值仅仅是字面值，并没有存储空间)，例如`10 = i; //错误，无法赋值；int a = i; //正确`；
+- 函数的返回值是右值
+- 左值引用：函数返回的是一个引用，则该返回的值或对象必须拥有自己的存储空间，此时可以将其作为左值进行赋值操作；只有左值才能够被引用；
+- 涉及const的左值引用：`int& a = 10;`，报错，因为10是右值，并不能使用左值来引用右值，因为此时引用创建的只是一个类似于指针的东西，当10这个右值消失后，a就无法被正确解析，程序会崩溃；但是，在该代码前加入const，即`const int& a = 10;`则可以正确运行。编译器实际上是继续了以下操作`int temp = 10; const int& a = temp;`；此原理同样适用于函数
+    ```
+    /若未使用const，则无法将右值作为参数输入到函数中
+    void SetValue(const int& value);
+    SetValue(i);
+    SetValue(10);
+    ```
+    **常量引用(const classname&)** 可以兼容临时的右值引用以及实际存在的左值变量，这也是为什么大多数函数都使用了常量引用
+- 右值引用：函数只接受临时对象，使用`&&`来进行右值引用；当进行重载时，如果有右值引用的函数并且有存在常量引用的函数时，在使用临时对象时，编译器仍然会选择右值引用的函数进行操作
