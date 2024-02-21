@@ -1461,6 +1461,8 @@ int main()
 - `make_unique<class_name>()`往往比`make_shared<class_name>()`更快
 
 ## C++17特性
+- 后缀表达式必须在其他表达式之前计算，例如：`funciton(value++, value++); value = 1;`则其中前一个是1，后一个是0(当然这是未定义行为，具体实现由不同的编译器来决定，此处只是可能的一种结果)
+
 **std::optional数据**
 - 在程序中数据可能有时会存在，而有时又不存在；例如：读取文件，若该文件无法读取该采取何种措施
 - **c++17**引入的新特性
@@ -1798,7 +1800,7 @@ int main()
     }
     ```
 
-## 左值(lvalue)右值(rvalue)与移动语义(move)
+## 左值(lvalue)右值(rvalue)与移动语义
 - 左值绝大多数时候处于等式的左侧，而右值则处于右侧，例如`int i = 10`，其中i是左值，10是右值；右值无法给左值赋值，而左值可以给左值赋值(右值仅仅是字面值，并没有存储空间)，例如`10 = i; //错误，无法赋值；int a = i; //正确`；
 - 函数的返回值是右值
 - 左值引用：函数返回的是一个引用，则该返回的值或对象必须拥有自己的存储空间，此时可以将其作为左值进行赋值操作；只有左值才能够被引用；
@@ -1811,3 +1813,116 @@ int main()
     ```
     **常量引用(const classname&)** 可以兼容临时的右值引用以及实际存在的左值变量，这也是为什么大多数函数都使用了常量引用
 - 右值引用：函数只接受临时对象，使用`&&`来进行右值引用；当进行重载时，如果有右值引用的函数并且有存在常量引用的函数时，在使用临时对象时，编译器仍然会选择右值引用的函数进行操作
+- **移动语义**
+  - 其实类似于将原先的深拷贝变为了浅拷贝，且做了一系列措施防止在删除临时对象时删除对应数据，导致程序报错；例如：`function("abcd");`，会先将`"abcd"`变成string类，然后在进行深拷贝(即进行第二次堆分配存储对应数据)，而通过移动语义可以减少这次拷贝(类似于使用指针进行传输) <strong><font color='red'>当然，此处举的例子不是特别恰当</font></strong>
+  - `std::move`是将一个对象转换成临时对象，从该对象中窃取数据赋值给其他对象，可以大大提高性能；大多数时候是与移动构造函数和移动赋值操作符相结合使用以防止错误调用拷贝构造函数和拷贝赋值操作符
+    ```
+    class String
+    {
+    public:
+        String() {}
+        String(const char* string)
+        {
+            std::cout << "Created!\n";
+            m_Size = strlen(string);
+            m_Data = new char[m_Size + 1];
+            memcpy(m_Data, string, m_Size);
+            m_Data[m_Size] = 0;
+        }
+
+        String(const String& other) //拷贝构造函数
+        {
+            std::cout << "Copied!\n";
+            m_Size = other.m_Size;
+            m_Data = new char[m_Size + 1];
+            memcpy(m_Data, other.m_Data, m_Size);
+            m_Data[m_Size] = 0;
+        }
+
+
+        String(String&& other) noexcept //移动构造函数
+        {
+            std::cout << "Moved!\n";
+            m_Size = other.m_Size;
+            m_Data = other.m_Data;
+            other.m_Data = nullptr;
+            other.m_Size = 0;
+        }
+
+        String& operator=(String&& other) noexcept  //赋值操作符
+        {
+            std::cout << "Moved!\n";
+
+            if (this != &other)
+            {
+                delete[] m_Data;	//防止内存泄漏
+                m_Size = other.m_Size;
+                m_Data = other.m_Data;
+                other.m_Data = nullptr;
+                other.m_Size = 0;
+            }
+
+            return *this;
+        }
+        ~String()
+        {
+            std::cout << "Destroyed!\n";
+            delete[] m_Data;
+        }
+
+        void Print()
+        {
+            if (m_Data) //与视频不一致，不判断是否为空会报错
+            {
+                for (uint32_t i = 0; i <= m_Size; ++i)
+                {
+                    std::cout << m_Data[i];
+                }
+            }
+            std::cout << "\n";
+        }
+            
+    private:
+        char* m_Data;
+        uint32_t m_Size;
+
+    };
+
+    class Entity
+    {
+    public:
+        Entity(const String& name) 
+            :m_Name((String&&)name)
+        {
+        }
+
+        void PrintName()
+        {
+            m_Name.Print();
+        }
+
+    private:
+        String m_Name;
+    };
+
+    int main()
+    {
+        Entity entity("abc");
+        entity.PrintName();
+
+        String apple = "Apple";
+        String dest;
+        //String dest = std::move(apple);   //移动构造函数
+        apple.Print();
+        dest.Print();
+        dest = std::move(apple);    //赋值操作符
+        apple.Print();
+        dest.Print();
+
+        std::cin.get();
+    }
+    ```
+
+##C++三法则、五法则
+- 三法则：如果需要析构函数，就必须要有拷贝构造函数和拷贝赋值操作符；
+- 五法则：在三法则的基础上，还要增加移动构造函数和移动赋值操作符
