@@ -1926,3 +1926,321 @@ int main()
 ##C++三法则、五法则
 - 三法则：如果需要析构函数，就必须要有拷贝构造函数和拷贝赋值操作符；
 - 五法则：在三法则的基础上，还要增加移动构造函数和移动赋值操作符
+
+##部分数据结构实现
+- **Array**
+  - 使用模板函数来实现可变数组大小(编译时)；重载索引操作符并且注意还需要重载const的索引操作符，防止创建的const对象无法进行访问；
+    ```
+    template<typename T, size_t S>
+    class Array
+    {
+    public:
+        constexpr size_t Size() const
+        {
+            return S;
+        }
+
+        T& operator[](size_t index)	
+        //使用size_t，避免因为平台不同导致int位数不同
+        {
+            if (!((index >= 0) && (index < S)))	
+            //检测索引是否在正确区域 否则报错
+            {	
+                //是双下划线__，如果出错则会在此处停止
+                __debugbreak();						//且在release模式下要去除，否则会带来额外的性能开销
+            }
+            return m_Data[index];
+        }
+
+        const T& operator[](size_t index) const
+        {
+            if (!((index >= 0) && (index < S)))
+            {
+                __debugbreak();		
+            }
+            return m_Data[index];
+        }
+
+        T* Data()		
+        //实际访问其中的数据，便于使用memset等方法
+        {
+            return m_Data;
+        }
+
+        const T* Data() const
+        {
+            return m_Data;
+        }
+
+    private:
+        T m_Data[S];
+    };
+
+    int main()
+    {
+        Array<int, 5> array;
+
+        memset(array.Data(), 0, array.Size() * sizeof(int));
+
+        //memset(&array[0], 0, array.Size() * sizeof(int));	
+        //也能够成立，因为栈分配必然是连续的
+
+        for (size_t i = 0; i < array.Size(); ++i)
+        {
+            //array[i] = 2;
+            std::cout << array[i] << std::endl;
+        }
+
+        const auto& arrayReference = array;
+        for (size_t i = 0; i < arrayReference.Size(); ++i)
+        {
+            //arrayReference[i] = 2;    //const对象无法更改值
+            std::cout << arrayReference[i] << std::endl;
+        }
+    }
+    ```
+- **vector**
+    ```
+    //vector.h
+    template<typename T>
+    class vector
+    {
+    public:
+        vector()
+        {
+            ReAlloc(2);
+        }
+
+        ~vector()
+        {
+            //直接使用delete实际上是调用T的析构函数
+            //当T拥有堆分配的数据，可能会调用两次析构导致报错
+            //在该类中，使用PopBack后，第一次调用析构会将堆分配数据删除
+            //但是并没有将该指针从m_Data中删除，我们只是通过m_Size来模拟删除操作
+            //当进行以下操作时，仍会再次调用析构函数导致删除两次堆分配数据从而报错
+            //delete[] m_Data;
+
+            Clear();
+            ::operator delete(m_Data, m_Capacity * sizeof(T));
+            //会删除内存空间，而不会通过调用析构函数来删除数据
+        }
+
+        void PushBack(const T& value)
+        {
+            if (m_Size >= m_Capacity)
+            {
+                ReAlloc(m_Capacity * 2);
+            }
+            m_Data[m_Size++] = value;
+        }
+
+        //即使参数声明了是右值引用，在函数中仍然会以左值来看，所以后面仍然需要std::move
+        void PushBack(T&& value)
+        {
+            if (m_Size >= m_Capacity)
+            {
+                ReAlloc(m_Capacity * 2);
+            }
+            m_Data[m_Size++] = std::move(value);
+        }
+
+        template<typename... Args>	//可变数量参数
+        //返回其引用，因为是就地构建，为了更加容易取回对象
+        T& EmplaceBack(Args&&... args)	//接受所有参数
+        {
+            if (m_Size >= m_Capacity)
+            {
+                ReAlloc(m_Capacity * 2);
+            }
+            m_Data[m_Size] = T(std::forward<Args>(args)...);	
+            //...是为了解包这些参数，将其转发给T，使用对应的构造函数进行构造
+            //例如啥都没传入，则相当于Vector3();
+            //又例如传入2,3,4，则相当于Vector3(2,3,4);
+            //如果传入的参数与构造函数不符，则会编译报错
+
+            //还有种奇巧淫技，甚至能够不使用move
+            //通过直接new出对象，并使用该对象覆盖掉对应位置即可
+            //即，创建了一个位置就在m_Data[m_Size]上的对象T(std::forward<Args>(args)...)
+            //new(&m_Data[m_Size]) T(std::forward<Args>(args)...);
+            return m_Data[m_Size++];
+        }
+
+        void PopBack()
+        {
+            if (m_Size > 0)
+            {
+                m_Size--;
+                m_Data[m_Size].~T();	//调用栈顶元素的析构函数
+            }
+        }
+
+        void Clear()
+        {
+            for (auto i = 0; i < m_Size; ++i)
+            {
+                m_Data[i].~T();
+            }
+
+            m_Size = 0;
+        }
+
+        T& operator[](size_t index)
+        {
+            if (!((index >= 0) && (index < m_Size)))
+            {
+                __debugbreak();
+            }
+            return m_Data[index];
+        }
+
+        const T& operator[](size_t index) const
+        {
+            if (!((index >= 0) && (index < m_Size)))
+            {
+                __debugbreak();
+            }
+            return m_Data[index];
+        }
+
+        size_t Size() const
+        {
+            return m_Size;
+        }
+
+        size_t Capacity() const
+        {
+            return m_Capacity;
+        }
+
+
+    private:
+        void ReAlloc(size_t newCapacity)
+        {
+            //1.分配新空间
+            //2.copy/move
+            //3.删除旧空间
+            //T* newblock = new T[newCapacity];
+            //以下是不调用构造函数版本的new
+            //只需要申请足够的空间即可
+            //返回void 需要进行类型转换
+            T* newblock = (T*)::operator new(newCapacity * sizeof(T));
+
+            if (m_Size > newCapacity)
+            {
+                m_Size = newCapacity;	//这不是会导致部分数据丢失嘛
+            }
+
+            for (size_t i = 0; i < m_Size; ++i)
+            {
+                //使用move而非copy
+                newblock[i] = std::move(m_Data[i]);
+            }
+
+            //memset(newblock, m_Data, m_Size);	//当是自定义类型时，会出错
+
+            //delete[] m_Data;
+            for (auto i = 0; i < m_Size; ++i)
+            {
+                m_Data[i].~T();
+            }
+            ::operator delete(m_Data, m_Capacity * sizeof(T));
+
+            m_Data = newblock;
+            m_Capacity = newCapacity;
+        }
+
+    private:
+        T* m_Data = nullptr;
+        size_t m_Size = 0;
+        size_t m_Capacity = 0;
+    };
+
+    //**********************************************
+    //main.cpp
+
+    struct Vector3
+    {
+        float m_x = 0.0f, m_y = 0.0f, m_z = 0.0f;
+
+        Vector3() {}
+
+        Vector3(float scale)
+            : m_x(scale), m_y(scale), m_z(scale) {}
+
+        Vector3(float x, float y, float z)
+            : m_x(x), m_y(y), m_z(z) {}
+
+        Vector3(const Vector3& other)
+            : m_x(other.m_x), m_y(other.m_y), m_z(other.m_z)
+        {
+            std::cout << "Copy!\n";
+        }
+
+        Vector3(Vector3&& other)
+            : m_x(other.m_x), m_y(other.m_y), m_z(other.m_z)
+        {
+            std::cout << "Move!\n";
+        }
+
+        ~Vector3()
+        {
+            std::cout << "Destroy!\n";
+        }
+
+        Vector3& operator=(const Vector3& other)
+        {
+            std::cout << "Copy!\n";
+            m_x = other.m_x;
+            m_y = other.m_y;
+            m_z = other.m_z;
+            return *this;
+        }
+
+        Vector3& operator=(Vector3&& other)
+        {
+            std::cout << "Move!\n";
+            m_x = other.m_x;
+            m_y = other.m_y;
+            m_z = other.m_z;
+            return *this;
+        }
+    };
+
+    template<typename T>
+    void PrintVector(const vector<T>& vec)
+    {
+        for (auto i = 0; i < vec.Size(); ++i)
+        {
+            std::cout << vec[i] << std::endl;
+        }
+
+        std::cout << "----------------------\n";
+    }
+
+    void PrintVector(const vector<Vector3>& vec)
+    {
+        for (auto i = 0; i < vec.Size(); ++i)
+        {
+            std::cout << vec[i].m_x << " " << vec[i].m_y << " " << vec[i].m_z << std::endl;
+        }
+
+        std::cout << "----------------------\n";
+    }
+
+    int main()
+    {
+        vector<Vector3> vec;
+        /*vec.PushBack(Vector3());
+        vec.PushBack(Vector3(1.0f));
+        vec.PushBack(Vector3(2, 3, 4));
+        PrintVector(vec);*/
+
+        //EmplaceBack并不会先生成一个临时对象
+        //而是只接受数据，然后在自己的数据块中直接进行构建
+        //从而减少复制带来的性能损失
+        vec.EmplaceBack();	//相当于PushBack(Vector3());
+        vec.EmplaceBack(1.0f);	//相当于PushBack(Vector3(1.0f));
+        vec.EmplaceBack(2, 3, 4); //相当于PushBack(Vector3(2, 3, 4));
+        PrintVector(vec);
+    }
+    ```
