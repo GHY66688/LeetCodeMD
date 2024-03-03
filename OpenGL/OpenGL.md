@@ -391,7 +391,7 @@ GLCall(glBindVertexArray(vao));
 
 
 ## 将以上方法抽象成类
-- 将报错检测抽象成`Renderer`类，包括ASSERT、CLCall、GLCleanError、GLLogCall
+- 将报错检测抽象成`Renderer`类，包括ASSERT、GLCall、GLCleanError、GLLogCall
 - 将VertexBuffer和IndexBuffer抽象成类，在构造函数中创建缓冲区，Bind中进行绑定，UnBind中解绑
 - 值得注意的是，抽象之后，openGL会存在bug。当关闭绘图窗口，程序并不会停止，而是会在GLCleanError循环。
   - 这是因为在关闭绘图窗口后，就失去了有效的openGL上下文和GLGetError，然后就会执行`while (glGetError() != GL_NO_ERROR);`；此时有两种方法，一种是创建缓冲区时使用new分配，在`glfwTerminate();`前delete掉它们。另外一种是在glfw的作用域中额外增加一个作用域，并将代码置于其中
@@ -414,7 +414,7 @@ struct VertexBufferElement
 	{
 		switch (type)
 		{
-			case GL_FLOAT:			return 4;
+			case GL_FLOAT:	        return 4;
 			case GL_UNSIGNED_INT:	return 4;
 			case GL_UNSIGNED_BYTE:	return 1;
 		}
@@ -846,19 +846,45 @@ GLCall(glEnableVertexAttribArray(i));
 
 ##数学库
 [下载数学库](github.com/g-truc/glm)
-```
-//ortho是生成正交矩阵，创建一个宽为4个单位，高为3个单位的窗口
-//左边界，右边界，下边界，上边界，近平面，远平面
-glm::mat4 proj = glm::ortho(-2.0f, 2.0f, -1.5f, 1.5f, -1.0f, 1.0f);
-```
-- 将该正交矩阵置入`Shader.shader`，使用统一变量来接收，`uniform mat4 u_MVP`(模型视图投影矩阵 model view projection matrix)，然后将其与顶点位置矩阵相乘，以适应屏幕。
-```
-uniform mat4 u_MVP;
+- 下载官方指定glm库，该库中的矩阵均以列为主
+    ```
+    //Application.cpp
+    //ortho是生成正交矩阵，创建一个宽为4个单位，高为3个单位的窗口
+    //左边界，右边界，下边界，上边界，近平面，远平面
+    glm::mat4 proj = glm::ortho(-2.0f, 2.0f, -1.5f, 1.5f, -1.0f, 1.0f);
+    ```
+- 在`Shader.shader`和`Application.cpp`中添加对应代码
+    ```
+    //Shader.shader
+    void Shader::SetUniformMat4f(const std::string& name, glm::mat4& matrix)
+    {
+        //v代表传入的是一个数组，
+        //统一变量名，传入数组个数， 
+        //是否需要转置(openGL中需要以列为主，若数组以行为主则需要进行转置)
+        //矩阵的内存地址，(即对矩阵的第一个元素取地址)
+        GLCall(glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, &matrix[0][0]));
+    }
 
-void main()
-{
-   gl_Position = u_MVP * position;
-   v_TexCoord = texCoord;
-};
-```
+    //Application.cpp
+    shader.SetUniformMat4f("u_MVP", proj);
+    ```
+- 将该正交矩阵置入`basic.shader`，使用统一变量来接收，`uniform mat4 u_MVP`(模型视图投影矩阵 model view projection matrix)，然后将其与顶点位置矩阵相乘，以适应屏幕。
+    ```
+    //basic.shader
+    uniform mat4 u_MVP;
 
+    void main()
+    {
+    gl_Position = u_MVP * position;
+    v_TexCoord = texCoord;
+    };
+    ```
+
+## 投影矩阵
+- 将3D世界中的点映射到2D窗口中，负责把顶点坐标转换成-1到1的正常设备坐标空间；
+- 例如：上述的`u_MVP`，如果需要渲染的物体的顶点坐标超出了创建的窗口范围(x轴-2.0\~2.0，y轴-1.5\~1.5，z轴-1.0\~1.0)，则不会进行渲染；假设此时有一个顶点的坐标为(-0.5f, 0.5f)(忽略z轴)，则创建的`u_MVP`会将该顶点坐标转换成(-0.25f, 0.333f)这样一个正常设备坐标(假设生成的窗口长宽均为-1.0\~1.0)；而通过观察生成的窗口也能看出大致的比例(窗口正中心到上边界的距离是到白色正方形上边界距离的三倍；到左边界的距离是到白色正方形左边界的四倍)
+![img](./OpenGL_img/投影矩阵.png)
+- 正交与透视投影矩阵
+    - 正交投影矩阵(orthographic)：通常运用于2D场景，例如：UI界面，2D游戏等，其特点在于没有远近的概念(没有近大远小一说)
+    - 透视投影矩阵(Perspective)：通常用于3D场景，例如：第一人称、第三人称等，其特点在于透视(近大远小)；
+    - 因此两种投影矩阵，前者大多是将高数值压缩到-1到1之间或其他符合要求的小范围数值；但后者还需要考虑z轴进行计算
