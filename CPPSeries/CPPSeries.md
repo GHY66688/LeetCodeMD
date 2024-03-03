@@ -57,6 +57,17 @@
         "Line2\n"                               Line2
         "Line3"\n;                              Line3
     ```
+- 范围循环其实是迭代器循环访问的缩写；例如
+    ```
+    for(auto value : values) {}
+    //相当于
+    for(std::vector<int>::iterator it = values.begin(); it != values.end(); ++it) {}
+    ```
+
+- 在对数组或其他数据结构进行访问时，可以采用[]或.at()访问
+    - 对于std::vector这类容器而言，[]不会进行边界检查，如果访问超出边界则会出现未定义行为，而.at()则会进行边界检查，若越界则抛出std::out_of_range异常
+    - 对于std::unordered_map这样的关联容器，[]可以直接进行访问，如果该键值不存在则会自动创建一个具有该键的默认元素；并且无法对const对象使用，因为返回的都是引用；而.at()则会在访问键值不存在时抛出std::out_of_range异常，并且其可以对const对象使用
+
 
 ## 预处理
 - 包含`#include, #define, #if, #endif`，其本质都是将对应的文件内容复制到对应位置；
@@ -1561,6 +1572,24 @@ int main()
     }
     ```
 
+**简化键值对的访问方式**
+```
+std::unordered_map<std::string, int> map;
+//c++17以前访问
+for(auto kv : map)
+{
+    auto& key = kv.first;
+    auto& value = kv.second;
+    std::cout << key << " = " << value << std::endl;
+}
+
+//c++17及以后访问
+for(auto [key, value] : map)
+{
+    std::cout << key << " = " << value << std::endl;
+}
+```
+
 ## 提高性能
 **多线程提高性能**
 - 实现并行需要找出代码之间的依赖关系，并清楚在不同的线程中存放合适的代码
@@ -2000,6 +2029,8 @@ int main()
     }
     ```
 - **vector**
+    - 当遇到需要调用构造函数和析构函数的类时，例如`std::string`，会报无法访问内存的错误，这是由于string等其他类型创建时需要调用构造函数，但是在vector中，进行申请空间和添加元素并没有调用构造函数，即`T* newblock = (T*)::operator new(newCapacity * sizeof(T));`上述代码只会申请符合内存要求的空间，并不会调用构造函数去构造newCapacity个T对象。因此，当插入元素或者初始化vector时，都只有空间而没有数据结构。所以需要使用一种方法来使得在指定的内存空间上调用构造函数。
+    - 在`vector::EmplaceBack(Args&&... args)`中，需要使用`new (&m_Data[m_Size]) T(std::forward<Args>(args)...);`以及在`vector::ReAlloc(size_t newCapacity)`中，进行语义移动时，需要使用`new (&newblock[i]) T(std::move(m_Data[i]));`，以此在指定内存地址调用构造函数
     ```
     //vector.h
     template<typename T>
@@ -2244,3 +2275,157 @@ int main()
         PrintVector(vec);
     }
     ```
+
+- **iterator**
+    - 其实质就是指针
+    ```
+    template<typename vector>
+    class VectorIterator
+    {
+    public:
+        using ValueType = typename vector::ValueType;
+        using PointerType = ValueType*;
+        using ReferenceType = ValueType&;
+
+    public:
+        VectorIterator(PointerType _Ptr)
+            : m_Ptr(_Ptr) {}
+
+        VectorIterator& operator++()	//前置递增运算符 ++i 可以避免创建临时对象
+        {
+            m_Ptr++;
+            return *this;
+        }
+
+        VectorIterator operator++(int)	//后置递增运算符 i++
+        {
+            VectorIterator iterator = *this;
+            ++(*this);	//访问上面的前置递增运算符
+            return iterator;
+        }
+
+        VectorIterator& operator--()	//前置递减运算符
+        {
+            m_Ptr--;
+            return *this;
+        }
+
+        VectorIterator operator--(int)	//后置递减运算符
+        {
+            VectorIterator iterator = *this;
+            --(*this);	
+            return iterator;
+        }
+
+        ReferenceType operator[](int index)
+        {
+            return *(m_Ptr + index);
+        }
+
+        PointerType operator->()	//箭头运算符 ptr->member
+        {
+            return m_Ptr;
+        }
+
+        ReferenceType operator*()	//解引用
+        {
+            return *m_Ptr;
+        }
+
+        bool operator==(const VectorIterator& other) const
+        {
+            return m_Ptr == other.m_Ptr;
+        }
+
+        bool operator!=(const VectorIterator& other) const
+        {
+            //return m_Ptr != other.m_Ptr;	//也可以实现，只是为了代码统一使用下面的代码
+            return !(*this == other);
+        }
+    private:
+        PointerType m_Ptr;
+    };
+
+    //需要在vector类中添加部分代码，以此实现与vectorIterator类的联动
+    class vector
+    {
+    public:
+        using ValueType = T;
+        using Iterator = VectorIterator<vector<T>>;
+
+    public:
+        Iterator begin()
+        {
+            //return VectorIterator<vector<T>>(m_Data); //可以使用该代码，使用上述重定义的类名可以简写
+            return Iterator(m_Data);
+        }
+
+        Iterator end()
+        {
+            //return VectorIterator<vector<T>>(m_Data + m_Size); //同上
+            return Iterator(m_Data + m_Size);
+        }
+    }
+
+    //main.cpp
+    int main()
+    {
+        //int 
+        //可以直接运行
+        vector<int> values;
+        values.EmplaceBack(1);
+        values.EmplaceBack(2);
+        values.EmplaceBack(3);
+        for (auto& value : values)
+        {
+            std::cout << value << " ";
+        }
+        std::cout << std::endl;
+
+        //std::string
+        vector<std::string> values;
+        values.EmplaceBack("1");
+        values.EmplaceBack("2");
+        values.EmplaceBack("3");
+        for (auto& value : values)
+        {
+            std::cout << value << " ";
+        }
+        std::cout << std::endl;
+    }
+    ```
+
+## 位运算符
+- 可以调用bitset来进行bit值的输出，`std::cout << std::bitset<num>(a) << std::endl;`，num为需要显示的位数
+- `<<`：左移运算符，相当于乘2，当需要赋值时，一定要使用`<</>>=`才能够将值覆盖掉，否则会无效；例如:`int a = 0b0101`，当采用`a << 4`时，只是把a左移了四位，但是a的值仍然是0b0101;而采用`a <<= 4`时，则是把a左移四位同时赋值给a，a的值则为0b01010000
+- `>>`：右移运算符，相当于除2，基本都是向下取整，因为这两个运算符大多作用于unsigned int
+- `&`：按位与，可以作为if条件来使用；例如：有一个数值，其中的每一位都代表一个选择，如果我们需要某种选择，则可以创建这样的一个数值，进行按位与操作，如果结果不为0则代表数值可用，否则不可用
+    ```
+    a = 1010 1100; //共8种选择，a选择了其中的四种，用1表示
+    b = 0000 1000; //创建数值，如果对象选择了第五种则采用
+    if(a & b) {}   //a & b = 0000 1000 != 0 所以执行if语句
+    ```
+- `|`：按位或，可以对数值进行还原，例如：原来`a = 0b1010 0100;` 但是之后通过某些代码，a变成了0b0100，此时如果需要将其复原则需要额外创建一个数值`b = 0b1010; b <<= 4;`再将两者相或则可恢复，即`c = a | b;`，c = 0b1010 0100
+- `~`：按位取反，可以与`&`结合实现一些需求
+- `^`：按位异或，对应位相同为0，不同为1；与自身进行按位异或，必然得到0；
+
+## std::map and std::unordered_map
+- std::map使用红黑树实现，会自动对键值进行排序
+- std::unordered_map使用哈希函数进行映射
+- 虽然可以使用自定义的数据结构作为键值输入，但是对于std::map需要重载运算符<，因为涉及到红黑树的排序问题；而对于std::unordered_map需要根据实际要求实现其hash函数，例如：
+    ```
+    namespace std {
+        template<>
+        struct hash<自定义数据结构>
+        {
+            size_t operator()(const 自定义数据结构& key)
+            {
+                //根据需求设定合适的函数并将其结果返回
+                //例如，将自定义数据结构中的string进行hash运算，使用现成的string的hash函数
+                //return hash<std::string>()(key.name)
+                return answer;
+            }
+        }
+    }
+    ```
+- 但是可以使用自定义数据结构的指针作为键值输入，因为指针就是64位无符号数，可以直接调用std中针对该类型的hash函数
