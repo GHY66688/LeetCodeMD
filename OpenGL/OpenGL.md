@@ -737,9 +737,9 @@ Texture::Texture(const std::string& path)
 
 	//i for int, 纹理类型，缩小过滤器的纹理渲染方式为：线性重采样
 	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-	//						放大过滤器(需要渲染的像素比自身大)
+	//放大过滤器(需要渲染的像素比自身大)
 	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-	//									水平环绕			嵌入(不会扩大区域)
+	//水平环绕			嵌入(不会扩大区域)
 	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
 	GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
 
@@ -880,11 +880,111 @@ GLCall(glEnableVertexAttribArray(i));
     };
     ```
 
-## 投影矩阵
-- 将3D世界中的点映射到2D窗口中，负责把顶点坐标转换成-1到1的正常设备坐标空间；
-- 例如：上述的`u_MVP`，如果需要渲染的物体的顶点坐标超出了创建的窗口范围(x轴-2.0\~2.0，y轴-1.5\~1.5，z轴-1.0\~1.0)，则不会进行渲染；假设此时有一个顶点的坐标为(-0.5f, 0.5f)(忽略z轴)，则创建的`u_MVP`会将该顶点坐标转换成(-0.25f, 0.333f)这样一个正常设备坐标(假设生成的窗口长宽均为-1.0\~1.0)；而通过观察生成的窗口也能看出大致的比例(窗口正中心到上边界的距离是到白色正方形上边界距离的三倍；到左边界的距离是到白色正方形左边界的四倍)
-![img](./OpenGL_img/投影矩阵.png)
-- 正交与透视投影矩阵
-    - 正交投影矩阵(orthographic)：通常运用于2D场景，例如：UI界面，2D游戏等，其特点在于没有远近的概念(没有近大远小一说)
-    - 透视投影矩阵(Perspective)：通常用于3D场景，例如：第一人称、第三人称等，其特点在于透视(近大远小)；
-    - 因此两种投影矩阵，前者大多是将高数值压缩到-1到1之间或其他符合要求的小范围数值；但后者还需要考虑z轴进行计算
+
+## 模型视图投影矩阵(Model View Projection Matrix, MVP)
+- M, V, P为三个不同的矩阵，这些矩阵都是4X4格式的矩阵，并且以MVP的顺序进行相乘<font color = 'red'>(OpenGL中由于是以列为主序的，所以是以PVM的顺序进行相乘；而在Direct3D、DirectX中是以行为主顺序的，所以是以MVP的顺序进行相乘)</font>
+- **投影矩阵(projection matrix)**
+    - 将3D世界中的点映射到2D窗口中，负责把顶点坐标转换成-1到1的正常设备坐标空间；
+    - 例如：上述的`u_MVP`，如果需要渲染的物体的顶点坐标超出了创建的窗口范围(x轴-2.0\~2.0，y轴-1.5\~1.5，z轴-1.0\~1.0)，则不会进行渲染；假设此时有一个顶点的坐标为(-0.5f, 0.5f)(忽略z轴)，则创建的`u_MVP`会将该顶点坐标转换成(-0.25f, 0.333f)这样一个正常设备坐标(假设生成的窗口长宽均为-1.0\~1.0)；而通过观察生成的窗口也能看出大致的比例(窗口正中心到上边界的距离是到白色正方形上边界距离的三倍；到左边界的距离是到白色正方形左边界的四倍)
+    ![img](./OpenGL_img/投影矩阵.png)
+    - 正交与透视投影矩阵
+        - 正交投影矩阵(orthographic)：通常运用于2D场景，例如：UI界面，2D游戏等，其特点在于没有远近的概念(没有近大远小一说)
+        - 透视投影矩阵(Perspective)：通常用于3D场景，例如：第一人称、第三人称等，其特点在于透视(近大远小)；
+        - 因此两种投影矩阵，前者大多是将高数值压缩到-1到1之间或其他符合要求的小范围数值；但后者还需要考虑z轴进行计算
+- **视图矩阵(View Matrix)**
+    - 在OpenGL中，实际上并没有相机的概念，而是通过对物体的反方向移动实现相机视角的移动，例如：将相机视角向左移，其实就是将物体向右移动，模拟出相机视角左移。
+- **模型矩阵(Model Matrix)**
+    - 控制需要绘制的物体的转换，平移、旋转等一系列操作
+    ```
+    //ortho是生成正交矩阵，创建一个宽为4个单位，高为3个单位的窗口
+    //投影矩阵，Projection Matrix
+    glm::mat4 proj = glm::ortho(0.0f, 960.0f, 0.0f, 540.0f, -1.0f, 1.0f);
+
+    //创建视图矩阵，View Matrix
+    //模拟相机向右移动，相当于将物体向左移动
+    //glm::mat4(1.0f)是创建了一个视图矩阵本体
+    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(-100.0f, 0.0f, 0.0f));
+
+    //创建模型矩阵, Model Matrix
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 200.0f, 0.0f));
+
+    //OpenGL中的矩阵是以列为主序，需要以PVM的顺序进行相乘得到mvp矩阵
+    glm::mat4 mvp = proj * view * model;
+
+    //再将该MVP矩阵通过uniform的方式传入到shader中
+    ```
+
+## ImGui
+[下载ImGui](https://github.com/ocornut/imgui)
+- 能够在代码运行时，对矩阵进行改动，而无须重新编译；(原理：每一帧会重新运算新传入的矩阵)
+- 传入对应的.h文件和.cpp文件(由于使用的是gl3，故使用相应的文件，其中的main文件是附带的一个demo，仅参考，不能将其包含到项目中，否则会main函数冲突)
+![img](./OpenGL_img/ImGui对应文件.png)
+- 大致用法：
+    - 创建完renderer后，创建ImGui的上下文并将window传入进行初始化，同时还能够设定其样式
+        ```
+        ImGui::CreateContext();
+        ImGui_ImplGlfwGL3_Init(window, true);
+        ImGui::StyleColorsDark();
+        ```
+    - 在开始循环后，使用OpenGL实现新帧 
+        `ImGui_ImplGlfwGL3_NewFrame();`
+    - 在切换缓冲区前进行渲染
+        ```
+        ImGui::Render();
+        ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+        ```
+    - 最终结束后，关闭ImGui
+        ```
+        ImGui_ImplGlfwGL3_Shutdown();
+        ImGui::DestroyContext();
+        ```
+- 如果想实现无重新编译便可实时改动MVP，则将需要实时改变的MVP矩阵置入循环帧中`ImGui_ImplGlfwGL3_NewFrame();`之后，并在ImGui渲染前使用合适的方法改变MVP，随后进入新帧即可
+    ```
+    glm::vec3 translation(0.0f, 200.0f, 0.0f);
+    while (!glfwWindowShouldClose(window)){
+        ...
+        ImGui_ImplGlfwGL3_NewFrame();
+        //改变M矩阵，translation为循环帧外提前预设的值
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), translation);
+        glm::mat4 mvp = proj * view * model;
+        ...
+        {
+            //参数分别为UI中需要显示的名字，想要修改的矩阵的内存地址，下限，上限
+            //传入.x是为了防止返回的是vec3的指针，并且由于vec3的结构，在访问.x后会返回float数组，符合SliderFloat3的要求
+            //需要注意的是SliderFloat3才是能够同时改变x，y，z
+            //如果设置为SliderFloat，只能够改变x
+            ImGui::SliderFloat3("Translation", &translation.x, 0.0f, 960.0f);  
+            //获得实时帧率
+            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+        }
+
+        ImGui::Render();
+        ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+    }
+    ```
+
+## 批渲染
+- 如果对于少量渲染对象，可以使用几种方法进行实现
+    - 1. 在每一帧渲染对象时，修改传入的图像的position数组
+    - 2. 在每一帧渲染对象时，修改统一变量，例如更改MVP数组来改变渲染对象的位置
+    ```
+    {
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), translationA);
+        glm::mat4 mvp = proj * view * model;
+
+        shader.SetUniformMat4f("u_MVP", mvp);
+
+        renderer.Draw(va, ib, shader);
+    }
+
+    {
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), translationB);
+        glm::mat4 mvp = proj * view * model;
+
+        shader.SetUniformMat4f("u_MVP", mvp);
+
+        renderer.Draw(va, ib, shader);
+    }
+    ```
+- 但是，实际使用中并不会采用该种方式；每一对大括号中都会调用一次Draw，会大幅度降低系统的效率导致低帧率等一系列情况
+- 实际使用时，采用批处理可以在一个单独的绘制调用中绘制它(把所有贴图塞进一个顶点缓冲区中，然后直接进行绘制)
