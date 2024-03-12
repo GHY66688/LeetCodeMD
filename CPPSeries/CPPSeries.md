@@ -1125,261 +1125,308 @@ int main()
     //可以快速返回values中第一个大于3的元素的迭代器
     ```
 ## 并发
-- **线程(thread)**
-    - 拷贝构造函数被禁用
-    - move构造函数能够将一个线程x移动到另一个线程中，而**x则不再是线程**
-    - 线程可以进行阻塞，但是在恢复后会在之前运行的基础上继续运行，不会重复运行
-    - 所有代码都会在线程上运行，如果不创建线程，则所有函数都会在main相对应的线程上运行
-    - 需要将线程完全运行完毕，否则会报错，因为直接关闭了该线程。
-    - 当线程完全运行完毕后，不能够再使用join函数，会报错，join函数是等待线程执行完毕后并回收资源
-    - join函数能够阻塞当前线程
-    - 如果不调用join，子线程会在执行完毕后自动回收，但是main线程可能会先于子线程结束，导致子线程成为**僵尸线程**
-        ```
-        #include<thread>
-
-        static bool th_finished = false;
-
-        void Print()
-        {
-            std::cout << "thread started" << std::endl;
-            std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
-            using namespace std::literals::chrono_literals;
-            while (!th_finished)
-            {
-                std::cout << "Working" << std::endl;
-                std::this_thread::sleep_for(1s);		//休息1s后继续执行
-            }
-            std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
-            std::cout << "thread finished" << std::endl;
-        }
-
-        int main()
-        {
-            std::thread worker(Print);	//创建线程，并直接开始运行
-
-            std::cin.get();			//按下enter，让该线程阻塞等待
-            th_finished = true;
-
-            worker.join();		//让该线程重新加入，在之前的基础上继续执行
-            std::cout << "thread ID is " << std::this_thread::get_id() << std::endl; 
-            //main在不同的线程上运行，有不同的id
-
-            //th_finished = false;
-            //worker.join();    //报错，因为该线程已经执行完了
-            
-            std::thread t1; //不是线程
-            std::thread t2(Print);  //线程
-            std::thread t3(std::move(t2));  //t3是线程，此时t2不是线程
-            t3.join();
-        }
-        ```
-- **mutex类**
-    - mutex：
-        - 不允许拷贝构造，也不允许move构造，初始状态为unlocked
-        - lock()：该mutex被其他线程占用，则会阻塞当前线程；未被其他线程占用，则至unlock前，当前线程都拥有该mutex；当前mutex已经被当前线程拥有，会造成死锁
-        - unlock()：解锁
-        - try_lock()：**该mutex被其他线程占用，则不会阻塞当前线程而是返回false**；该mutex未被其他线程占用，则在unlock()前，当前线程都拥有该mutex；当前mutex已经被当前线程拥有，会造成死锁
-        ```
-        volatile int counter(0); // non-atomic counter
-        std::mutex mtx;           // locks access to counter
-
-        void attempt_10k_increases() {
-            for (int i=0; i<10000; ++i) {
-                if (mtx.try_lock()) {   // only increase if currently not locked:
-                    ++counter;
-                    mtx.unlock();
-                }
-            }
-        }
-
-        int main (int argc, const char* argv[]) {
-            std::thread threads[10];
-            for (int i=0; i<10; ++i)
-                threads[i] = std::thread(attempt_10k_increases);
-
-            for (auto& th : threads) th.join();
-            std::cout << counter << " successful increases of the counter.\n";
-
-            return 0;
-        }
-        ```
-    - recursive_mutex：
-        - 允许同一个线程对同一个mutex进行多次上锁，解锁则也需要进行相同次数的解锁，即lock()次数与unlock()次数相同
-    - time_mutex：
-        - 比mutex多两个成员函数`try_lock_for()`和`try_lock_until()`
-        - try_lock_for()：接收一个时间范围，该时间范围内没有获得锁则被阻塞，如果在这期间有锁被解了，即可获得该锁，否则会返回false
-        - try_lock_until()：接收一个时间点，该时间点前未获得锁则阻塞并返回false，否则获得该锁
-        ```
-        std::timed_mutex mtx;
-
-        void fireworks() {
-        // waiting to get a lock: each thread prints "-" every 200ms:
-        while (!mtx.try_lock_for(std::chrono::milliseconds(200))) {
-            std::cout << "-";
-        }
-        // got a lock! - wait for 1s, then this thread prints "*"
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << "*\n";
-        mtx.unlock();
-        }
-
-        int main ()
-        {
-        std::thread threads[10];    //一开始会有一个线程获得锁并sleep 1s，此时其他thread会try_lock_for()，失败则会打印'-'
-        // spawn 10 threads:
-        for (int i=0; i<10; ++i)
-            threads[i] = std::thread(fireworks);
-
-        for (auto& th : threads) th.join();
-
-        return 0;
-        }
-            ```
-    - recursive_time_mutex：
-        - 能够递归的time_mutex
-- **lock_guard()**
-    - 使用一个局部的lock_guard能够在超出作用域后自动解锁并释放，防止出现死锁
+### **线程(thread)**
+- 拷贝构造函数被禁用
+- move构造函数能够将一个线程x移动到另一个线程中，而**x则不再是线程**
+- 线程可以进行阻塞，但是在恢复后会在之前运行的基础上继续运行，不会重复运行
+- 所有代码都会在线程上运行，如果不创建线程，则所有函数都会在main相对应的线程上运行
+- 需要将线程完全运行完毕，否则会报错，因为直接关闭了该线程。
+- 当线程完全运行完毕后，不能够再使用join函数，会报错，join函数是等待线程执行完毕后并回收资源
+- join函数能够阻塞当前线程
+- 如果不调用join，子线程会在执行完毕后自动回收，但是main线程可能会先于子线程结束，导致子线程成为**僵尸线程**
     ```
-    std::mutex mtx;
+    #include<thread>
 
-    void print_even (int x) {
-        if (x%2==0) std::cout << x << " is even\n";
-        else 
+    static bool th_finished = false;
+
+    void Print()
+    {
+        std::cout << "thread started" << std::endl;
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
+        using namespace std::literals::chrono_literals;
+        while (!th_finished)
         {
-            std::cout << x << " not even\n"; 
-            throw (std::logic_error("not even"));   //后面的catch能够捕获此处throw出来的错误
+            std::cout << "Working" << std::endl;
+            std::this_thread::sleep_for(1s);		//休息1s后继续执行
+        }
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl;
+        std::cout << "thread finished" << std::endl;
+    }
+
+    int main()
+    {
+        std::thread worker(Print);	//创建线程，并直接开始运行
+
+        std::cin.get();			//按下enter，让该线程阻塞等待
+        th_finished = true;
+
+        worker.join();		//让该线程重新加入，在之前的基础上继续执行
+        std::cout << "thread ID is " << std::this_thread::get_id() << std::endl; 
+        //main在不同的线程上运行，有不同的id
+
+        //th_finished = false;
+        //worker.join();    //报错，因为该线程已经执行完了
+        
+        std::thread t1; //不是线程
+        std::thread t2(Print);  //线程
+        std::thread t3(std::move(t2));  //t3是线程，此时t2不是线程
+        t3.join();
+    }
+    ```
+### **mutex类**
+- **mutex**：
+    - 不允许拷贝构造，也不允许move构造，初始状态为unlocked
+    - lock()：该mutex被其他线程占用，则会阻塞当前线程；未被其他线程占用，则至unlock前，当前线程都拥有该mutex；当前mutex已经被当前线程拥有，会造成死锁
+    - unlock()：解锁
+    - try_lock()：**该mutex被其他线程占用，则不会阻塞当前线程而是返回false**；该mutex未被其他线程占用，则在unlock()前，当前线程都拥有该mutex；当前mutex已经被当前线程拥有，会造成死锁
+    ```
+    volatile int counter(0); // non-atomic counter
+    std::mutex mtx;           // locks access to counter
+
+    void attempt_10k_increases() {
+        for (int i=0; i<10000; ++i) {
+            if (mtx.try_lock()) {   // only increase if currently not locked:
+                ++counter;
+                mtx.unlock();
+            }
         }
     }
 
-    void print_thread_id (int id) {
-        try {
-            // using a local lock_guard to lock mtx guarantees unlocking on destruction / exception:
-            std::lock_guard<std::mutex> lck (mtx);
-            print_even(id);
+    int main (int argc, const char* argv[]) {
+        std::thread threads[10];
+        for (int i=0; i<10; ++i)
+            threads[i] = std::thread(attempt_10k_increases);
+
+        for (auto& th : threads) th.join();
+        std::cout << counter << " successful increases of the counter.\n";
+
+        return 0;
+    }
+    ```
+- **recursive_mutex**：
+    - 允许同一个线程对同一个mutex进行多次上锁，解锁则也需要进行相同次数的解锁，即lock()次数与unlock()次数相同
+- **time_mutex**：
+    - 比mutex多两个成员函数`try_lock_for()`和`try_lock_until()`
+    - try_lock_for()：接收一个时间范围，该时间范围内没有获得锁则被阻塞，如果在这期间有锁被解了，即可获得该锁，否则会返回false
+    - try_lock_until()：接收一个时间点，该时间点前未获得锁则阻塞并返回false，否则获得该锁
+    ```
+    std::timed_mutex mtx;
+
+    void fireworks() {
+    // waiting to get a lock: each thread prints "-" every 200ms:
+    while (!mtx.try_lock_for(std::chrono::milliseconds(200))) {
+        std::cout << "-";
+    }
+    // got a lock! - wait for 1s, then this thread prints "*"
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::cout << "*\n";
+    mtx.unlock();
+    }
+
+    int main ()
+    {
+    std::thread threads[10];    //一开始会有一个线程获得锁并sleep 1s，此时其他thread会try_lock_for()，失败则会打印'-'
+    // spawn 10 threads:
+    for (int i=0; i<10; ++i)
+        threads[i] = std::thread(fireworks);
+
+    for (auto& th : threads) th.join();
+
+    return 0;
+    }
+        ```
+- **recursive_time_mutex**：
+    - 能够递归的time_mutex
+### **lock_guard()**
+- 使用一个局部的lock_guard能够在超出作用域后自动解锁并释放，防止出现死锁
+```
+std::mutex mtx;
+
+void print_even (int x) {
+    if (x%2==0) std::cout << x << " is even\n";
+    else 
+    {
+        std::cout << x << " not even\n"; 
+        throw (std::logic_error("not even"));   //后面的catch能够捕获此处throw出来的错误
+    }
+}
+
+void print_thread_id (int id) {
+    try {
+        // using a local lock_guard to lock mtx guarantees unlocking on destruction / exception:
+        std::lock_guard<std::mutex> lck (mtx);
+        print_even(id);
+    }
+    catch (std::logic_error&) {
+        std::cout << "[exception caught]\n";
+    }
+}
+
+int main ()
+{
+    std::thread threads[10];
+    // spawn 10 threads:
+    for (int i=0; i<10; ++i)
+        threads[i] = std::thread(print_thread_id,i+1);
+
+    for (auto& th : threads) th.join();
+
+    return 0;
+}
+```
+### **unique_lock()**
+- 相较于lock_guard()能够更加灵活的进行加解锁
+- 能够对临界区进行更加灵活的控制，在需要时手动加解锁，而lock_guard()一旦被创建就会上锁，到作用域结束才会解锁
+- 能够进行延迟上锁，而lock_guard()一旦被创建就会上锁，到作用域结束才会解锁
+    ```
+    std::mutex mtx;
+    void myThread()
+    {
+        std::unique_lock<std::mutex> lock(mtx, std::defer_lock);    //defer_lock是用于指示创建时不要立即上锁
+        //其他操作
+        std::this_thread.sleep_for(1s); //延迟1s上锁
+        lock.lock();    //手动上锁
+        //访问临界区
+        lock.unlock();  //手动解锁
+    }
+    ```
+- 支持对mutex进行条件变量的等待操作
+    ```
+    #include<condition_variable>
+
+    std::mutex mtx;
+    std::condition_variable cv; //条件变量
+    bool data_ready = false;    //条件
+
+    void waiting_for_data()
+    {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, []{ return data_ready; }); // 等待条件满足
+        // 在这里可以安全地处理数据
+        std::cout << "waiting_for_data done\n";
+    }
+
+    void prepare_data()
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            data_ready = true;
         }
-        catch (std::logic_error&) {
-            std::cout << "[exception caught]\n";
+        cv.notify_one(); // 通知等待线程
+    }
+
+    int main()
+    {
+        std::thread t1(waiting_for_data);
+        std::thread t2(prepare_data);
+
+        t1.join();
+        t2.join();
+
+        return 0;
+    }
+    ```
+### **condition_variable**
+- 用于多线程变成的同步语言，与mutex和unique_lock()一起使用，提供线程的等待和条件通知功能
+- 当 `std::condition_variable` 对象的某个 wait 函数被调用的时候，它使用 `std::unique_lock`(通过 std::mutex) 来锁住当前线程。当前线程会一直被阻塞，直到另外一个线程在相同的 `std::condition_variable` 对象上调用了 notification 函数来唤醒当前线程。
+- 当前线程调用 wait() 后将被阻塞(此时当前线程应该获得了锁（mutex），不妨设获得锁 lck)，直到另外某个线程调用 `notify_*` 唤醒了当前线程。**在线程被阻塞时，该函数会自动调用 `lck.unlock()` 释放锁**，使得其他被阻塞在锁竞争上的线程得以继续执行。另外，一旦当前线程获得通知(notified，通常是另外某个线程调用 notify_* 唤醒了当前线程)，**wait() 函数也是自动调用 lck.lock()**，使得 lck 的状态和 wait 函数被调用时相同。
+- `wait(lck, pred)`：让当前线程在条件不满足时释放lck，直到另一个线程调用`notify_*`为止，pred就是条件(可以是一个变量，也可以是一个函数)，<font color="red">lck必须是std::unique_lock\<std::mutex\>类型参数，而`std::condition_variable_any`的wait函数可以接收任何lockable参数</font>
+- `wait_for(lck, time)`在线程收到`notify_*()`前以及超时之前，都会阻塞该线程，超时后会返回值(`std::cv_status::timeout`，如果不超时返回`std::cv_status::no_timeout`)
+-  `wait_for(lck, time, pred)`则是当pred为false时会阻塞，当pred为true同时其他线程唤醒它时才会解除阻塞
+- `wait_until(lck, time_point)` `wait_until(lck, time_point, pred)`用法与`wait_for()`类似
+- `notify_one()`：唤醒一个等待在条件变量上的线程
+- `notify_all()`：唤醒所有等待在条件变量上的线程
+- `notify_all_at_thread_exit()`：当该线程结束后会唤醒所有cv上的线程
+    ```
+    std::mutex mtx;
+    std::condition_variable cv;
+
+    int cargo = 0;
+    bool shipment_available()
+    {
+        return cargo != 0;
+    }
+
+    // 消费者线程.
+    void consume(int n)
+    {
+        for (int i = 0; i < n; ++i) {
+            std::unique_lock <std::mutex> lck(mtx);
+            cv.wait(lck, shipment_available);   //如果shipment_available为false则调用wait()
+            std::cout << cargo << '\n';
+            cargo = 0;
+        }
+    }
+
+    int main()
+    {
+        std::thread consumer_thread(consume, 10); // 消费者线程.
+
+        // 主线程为生产者线程, 生产 10 个物品.
+        for (int i = 0; i < 10; ++i) {
+            while (shipment_available())
+                std::this_thread::yield();  //当前线程时间片让给其他线程
+            std::unique_lock <std::mutex> lck(mtx); //如果cargo为0，则主线程上锁进行后续操作，超出作用域后自动解锁
+            cargo = i + 1;
+            cv.notify_one();    //唤醒一个线程
+            //cv.notify_all();  //唤醒cv上的所有线程
+        }
+
+        consumer_thread.join();
+
+        
+
+        return 0;
+    }
+    ```
+### **\#include\<future\>**
+- **promise(属于Providers类)**
+    - promise对象可以保存某一类型的值，且该值可以被相关联的future对象(可以在其他线程中)读取，即promise对象在构造时可以与一个共享状态(一般是std::future)相关联，并且保存一个类型为T的值
+    - 通过`get_future`来获取与promise相关联的future对象
+    - 通过`set_value`来设置共享状态的值且只能设置一次，在调用该函数后，**promise对象就会变为fulfilled状态(表示整个promise对象已经处于设置了值或异常的状态)，同时共享状态中的`Ready flag`则会变为true(表示已经设置了值或异常)**；主要是因为`std::promise` 通常与 `std::future` 配合使用，用于在一个线程中传递一个值给另一个线程。一旦值被设置，`std::future` 就可以通过 `get()` 获取这个值。因此，为确保线程间通信的可靠性，`std::promise` 只允许设置一次值，从而保证其状态不可变。如果不调用该函数，promise对象会在析构时自动设置一个`future_error`异常来设置自身的准备状态
+    - `set_exception()`：设置异常状态，同时`Ready flag`会变为true
+    - 拷贝构造函数被禁用，可以使用move构造函数
+    - `get_future()`：对于每一个promise对象，只能够调用一次该函数
+    - `set_value_at_thread_exit`：设置共享状态的值，但是`Ready flag`不变，当线程退出时，promise对象会自动将其设置为true，与该对象关联的future对象进行`get()`会阻塞，直到promise所在线程结束才能获取共享状态的值；<font color="red">如果在该函数之后，又进行了`set_value()`操作，则会报`promise_already_satisfied`错误</font>
+    - `swap()`：交换两个promise对象的共享状态，<font color="red">具体怎么交换没试出来</font>
+    ```
+    void get_int(std::promise<int>& prom) {
+        int x;
+        std::cout << "Please, enter an integer value: ";
+        std::cin.exceptions (std::ios::failbit);   // 读取失败时，抛出std::ios_base::failure异常
+        try {
+            std::cin >> x;                         // sets failbit if input is not int
+            prom.set_value(x);                     //设置promise共享状态的值
+        } catch (std::exception&) {
+            prom.set_exception(std::current_exception());   //设置异常
+        }
+    }
+
+    void print_int(std::future<int>& fut) {
+        try {
+            int x = fut.get();                  //会抛出异常
+            std::cout << "value: " << x << '\n';
+        } catch (std::exception& e) {
+            std::cout << "[exception caught: " << e.what() << "]\n";
         }
     }
 
     int main ()
     {
-        std::thread threads[10];
-        // spawn 10 threads:
-        for (int i=0; i<10; ++i)
-            threads[i] = std::thread(print_thread_id,i+1);
+        std::promise<int> prom;     //生成promise对象，int可以换成自定义类
+        std::future<int> fut = prom.get_future();   //和future关联
 
-        for (auto& th : threads) th.join();
+        std::thread th1(get_int, std::ref(prom));   
+        std::thread th2(print_int, std::ref(fut));
 
+        th1.join(); 
+        th2.join();
+
+        prom = std::promise<int>(); //move构造函数
         return 0;
     }
     ```
-- **unique_lock()**
-    - 相较于lock_guard()能够更加灵活的进行加解锁
-    - 能够对临界区进行更加灵活的控制，在需要时手动加解锁，而lock_guard()一旦被创建就会上锁，到作用域结束才会解锁
-    - 能够进行延迟上锁，而lock_guard()一旦被创建就会上锁，到作用域结束才会解锁
-        ```
-        std::mutex mtx;
-        void myThread()
-        {
-            std::unique_lock<std::mutex> lock(mtx, std::defer_lock);    //defer_lock是用于指示创建时不要立即上锁
-            //其他操作
-            std::this_thread.sleep_for(1s); //延迟1s上锁
-            lock.lock();    //手动上锁
-            //访问临界区
-            lock.unlock();  //手动解锁
-        }
-        ```
-    - 支持对mutex进行条件变量的等待操作
-        ```
-        #include<condition_variable>
-
-        std::mutex mtx;
-        std::condition_variable cv; //条件变量
-        bool data_ready = false;    //条件
-
-        void waiting_for_data()
-        {
-            std::unique_lock<std::mutex> lock(mtx);
-            cv.wait(lock, []{ return data_ready; }); // 等待条件满足
-            // 在这里可以安全地处理数据
-            std::cout << "waiting_for_data done\n";
-        }
-
-        void prepare_data()
-        {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                data_ready = true;
-            }
-            cv.notify_one(); // 通知等待线程
-        }
-
-        int main()
-        {
-            std::thread t1(waiting_for_data);
-            std::thread t2(prepare_data);
-
-            t1.join();
-            t2.join();
-
-            return 0;
-        }
-        ```
-- **condition_variable**
-    - 用于多线程变成的同步语言，与mutex和unique_lock()一起使用，提供线程的等待和条件通知功能
-    - `wait(lock, pred)`：让当前线程在条件不满足时释放lock，直到另一个线程调用`notify_*`为止，pred就是条件(可以是一个变量，也可以是一个函数)
-    - `notify_one()`：唤醒一个等待在条件变量上的线程
-    - `notify_all()`：唤醒所有等待在条件变量上的线程
-    - 代码案例如上
-- **\#include\<future\>**
-    - **promise(属于Providers类)**
-        - promise对象可以保存某一类型的值，且该值可以被相关联的future对象(可以在其他线程中)读取，即promise对象在构造时可以与一个共享状态(一般是std::future)相关联，并且保存一个类型为T的值
-        - 通过`get_future`来获取与promise相关联的future对象
-        - 通过`set_value`来设置共享状态的值且只能设置一次，在调用该函数后，**promise对象就会变为fulfilled状态(表示整个promise对象已经处于设置了值或异常的状态)，同时共享状态中的`Ready flag`则会变为true(表示已经设置了值或异常)**；主要是因为`std::promise` 通常与 `std::future` 配合使用，用于在一个线程中传递一个值给另一个线程。一旦值被设置，`std::future` 就可以通过 `get()` 获取这个值。因此，为确保线程间通信的可靠性，`std::promise` 只允许设置一次值，从而保证其状态不可变。如果不调用该函数，promise对象会在析构时自动设置一个`future_error`异常来设置自身的准备状态
-        - `set_exception()`：设置异常状态，同时`Ready flag`会变为true
-        - 拷贝构造函数被禁用，可以使用move构造函数
-        - `get_future()`：对于每一个promise对象，只能够调用一次该函数
-        - `set_value_at_thread_exit`：设置共享状态的值，但是`Ready flag`不变，当线程退出时，promise对象会自动将其设置为true，与该对象关联的future对象进行`get()`会阻塞，直到promise所在线程结束才能获取共享状态的值；<font color="red">如果在该函数之后，又进行了`set_value()`操作，则会报`promise_already_satisfied`错误</font>
-        - `swap()`：交换两个promise对象的共享状态，<font color="red">具体怎么交换没试出来</font>
-        ```
-        void get_int(std::promise<int>& prom) {
-            int x;
-            std::cout << "Please, enter an integer value: ";
-            std::cin.exceptions (std::ios::failbit);   // 读取失败时，抛出std::ios_base::failure异常
-            try {
-                std::cin >> x;                         // sets failbit if input is not int
-                prom.set_value(x);                     //设置promise共享状态的值
-            } catch (std::exception&) {
-                prom.set_exception(std::current_exception());   //设置异常
-            }
-        }
-
-        void print_int(std::future<int>& fut) {
-            try {
-                int x = fut.get();                  //会抛出异常
-                std::cout << "value: " << x << '\n';
-            } catch (std::exception& e) {
-                std::cout << "[exception caught: " << e.what() << "]\n";
-            }
-        }
-
-        int main ()
-        {
-            std::promise<int> prom;     //生成promise对象，int可以换成自定义类
-            std::future<int> fut = prom.get_future();   //和future关联
-
-            std::thread th1(get_int, std::ref(prom));   
-            std::thread th2(print_int, std::ref(fut));
-
-            th1.join(); 
-            th2.join();
-
-            prom = std::promise<int>(); //move构造函数
-            return 0;
-        }
-        ```
 - **packaged_task(属于Providers类)**
     - 其生命周期会一直持续到最后一个与其关联的对象被释放或销毁为止
     - `std::packaged_task` 包装一个可调用的对象，并且允许异步获取该可调用对象产生的结果，从包装可调用对象意义上来讲，`std::packaged_task` 与 `std::function` 类似，只不过 `std::packaged_task` 将其包装的可调用对象的执行结果传递给一个 `std::future` 对象（该对象通常在另外一个线程中获取 `std::packaged_task` 任务的执行结果）。
@@ -1477,9 +1524,202 @@ int main()
         - 返回一个`std::shared_future`对象，调用该函数后，原future对象不与任何共享状态相关联，因而无效，但是返回的`std::shared_future`能够被访问多次(调用多次`get()`)
     - `std::future::wait()`
         - 等待与当前future对象相关联的共享状态变更为ready，如果不是ready，则阻塞该线程，直到状态变为ready；<font color="red">但是并不会读取共享状态的值或异常</font>
-    - ``std::future::wait_for()`
+    - `std::future::wait_for()`
         - 可以设置一个时间间隔，如果在该时间间隔中共享状态并不是ready则会阻塞当前线程；在该段时间结束后会返回`future_status::ready` 或 `future_statue::timeout`(超时) 或 `future_statue::deferred`(共享状态包含一个deferred函数)
         - `std::future::wait_until()`能够设置一个时间点，实际作用与返回值与`std::future::ready`相同
+- **std::shared_future(属于Futures类)**
+    - `std::shared_future` 与` std::future` 类似，但是 `std::shared_future` 可以拷贝、多个 `std::shared_future` 可以共享某个共享状态的最终结果(即共享状态的某个值或者异常)。shared_future 可以通过某个 `std::future` 对象隐式转换（参见 std::shared_future 的构造函数），或者通过 `std::future::share()` 显示转换，无论哪种转换，被转换的那个 `std::future` 对象都会变为 not-valid(即失效).
+    - 有默认构造函数，**可以使用拷贝构造函数**， 可以使用move构造函数将`std::shared_future`move到新的shared_future对象上，也可以使用move赋值函数将`std::future`move到`std::shared_future`上，此时，原`std::future`对象失效
+        ```
+        int main()
+        {
+            // call function asynchronously:
+            std::future < bool > fut = std::async(is_prime, 444444443); //在后台异步执行，move赋值操作
+            std::shared_future<bool> sfut = fut.share();    //share转换
+            // std::shared_future<bool> sfut1 = std::move(fut); //move from future  因为fut已经通过share()转换，所以fut已经无效，无法进行move
+            std::shared_future<bool> sfut2 = sfut;  //copy
+
+            // do something while waiting for function to set future:
+            std::cout << "checking, please wait";
+            std::chrono::milliseconds span(100);
+            while (sfut.wait_for(span) == std::future_status::timeout)   //如果200ms内，Providers没有将状态设置为ready，则进行while循环并阻塞is_prime线程
+                std::cout << '.';
+
+            bool x = sfut.get();         // retrieve return value
+            // bool y = sfut1.get();
+            bool z = sfut2.get();
+
+            std::cout << "\n444444443 " << (x ? "is" : "is not") << " prime.\n";
+
+            // std::cout << "\n444444443 " << (y ? "is" : "is not") << " prime.\n";
+
+            std::cout << "\n444444443 " << (z ? "is" : "is not") << " prime.\n";
+
+            return 0;
+        }
+        ```
+- **`std::async()`**
+    - 分为两类`future<typename result_of<Fn(Args...)>::type> async(Fn&& fn, Args&&... args);`和`future<typename result_of<Fn(Args...)>::type> async(launch policy, Fn&& fn, Args&&... args);`
+    - 前者并没有指定异步任务的启动方式，policy可以是`launch::async`以及`launch::deferred`以及两者的按位或
+- **与`std::future`相关的枚举类**
+    - `enum class future_errc`
+        |类型|取值|描述|
+        |------------|----|----------------------------------------------------------------------------|
+        |broken_promise|0   |与该 std::future 共享状态相关联的 std::promise 对象在设置值或者异常之前一被销毁。|
+        |future_already_retrieved|1|与该 std::future 对象相关联的共享状态的值已经被当前 Provider 获取了，即调用了 std::future::get 函数。|
+        |promise_already_satisfied|2|std::promise 对象已经对共享状态设置了某一值或者异常|
+        |no_state|3|无共享状态。|
+
+    - `std::future_status`
+        |类型|取值|描述|
+        |----|---|----|
+        |future_status::ready	|0|	wait_for(或wait_until) 因为共享状态的标志变为 ready 而返回。|
+        |future_status::timeout	|1|	超时，即 wait_for(或wait_until) 因为在指定的时间段（或时刻）内共享状态的标志依然没有变为 ready 而返回|
+        |future_status::deferred|2|共享状态包含了 deferred 函数。|
+    - `std::launch`
+        |类型|描述|
+        |----|----|
+        |launch::async	|Asynchronous: 异步任务会在另外一个线程中调用，并通过共享状态返回异步任务的结果（一般是调用 std::future::get() 获取异步任务的结果）。|
+        |launch::deferred	|Deferred: 异步任务将会在共享状态被访问时调用，相当于按需调用（即延迟(deferred)调用）。|
+        ```
+        void do_print_ten(char c, int ms)
+        {
+            for (int i = 0; i < 10; ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+                std::cout << c;
+            }
+        }
+
+        int main()
+        {
+            std::cout << "with launch::async:\n";   //使用launch::async会建立不同的线程并同时执行，因此在输出中*@会交错出现
+            std::future < void >foo =
+                std::async(std::launch::async, do_print_ten, '*', 100);
+            std::future < void >bar =
+                std::async(std::launch::async, do_print_ten, '@', 200);
+            // async "get" (wait for foo and bar to be ready):
+            foo.get();
+            bar.get();
+            std::cout << "\n\n";
+
+            std::cout << "with launch::deferred:\n";    //使用launch::deferrd只有在get()时会调用，因此会先出现*且全部打印完后才会开始打印@
+            foo = std::async(std::launch::deferred, do_print_ten, '*', 100);
+            bar = std::async(std::launch::deferred, do_print_ten, '@', 200);
+            // deferred "get" (perform the actual calls):
+            foo.get();
+            bar.get();
+            std::cout << '\n';
+
+            return 0;
+        }
+        ```
+### \#include\<atomic\>
+- **`atomic_flag`**
+    - 只有默认构造函数，拷贝构造函数已被禁用，也不能 move 赋值
+    - 如果在初始化时没有明确使用 `ATOMIC_FLAG_INIT` 初始化，那么新创建的 `std::atomic_flag` 对象的状态是未指定的（unspecified）（既没有被 set 也没有被 clear。）
+    - `ATOMIC_FLAG_INIT`: 如果某个 `std::atomic_flag` 对象使用该宏初始化，那么可以保证该 `std::atomic_flag` 对象在创建时处于 clear 状态。
+    - `std::atomic_flag::test_and_set()`：原子操作；首先检查 `std::atomic_flag` 标志，如果 `std::atomic_flag` 之前没有被设置过，则设置 `std::atomic_flag` 的标志，并返回先前该 `std::atomic_flag` 对象是否被设置过，如果之前 `std::atomic_flag` 对象已被设置，则返回 true，否则返回 false。
+    - `std::atomic::clear()`：清除 `std::atomic_flag` 对象的标志位，即设置 atomic_flag 的值为 false
+    - 结合上述两个函数，能够将`std::atomic_flag`对象作为自旋锁使用
+    ```
+    std::atomic_flag lock = ATOMIC_FLAG_INIT;   //初始化为clear状态，即flag位设为false
+
+    void f(int n)
+    {
+        for (int cnt = 0; cnt < 100; ++cnt) {
+            while (lock.test_and_set(std::memory_order_acquire))  // std::memory_order_acquire为指定Memory Order，如果此时lock是clear状态，则该线程进入后续操作，其他线程的test_and_set()会返回true则会进行自旋等待
+                ; // spin
+            std::cout << "Output from thread " << n << '\n';
+            lock.clear(std::memory_order_release);               // std::memort_order_release指定Memory Order，解锁后，其他线程中的一个才能够关闭自旋锁并执行，以此类推
+        }
+    }
+
+    int main()
+    {
+        std::vector<std::thread> v;
+        for (int n = 0; n < 10; ++n) {
+            v.emplace_back(f, n);
+        }
+        for (auto& t : v) {
+            t.join();
+        }
+    }
+    ```
+- **`atomic`**
+    - 默认构造函数创建的atomic对象处于未初始化状态，可以通过`atomic_init()`进行初始化<font color="blue">(`std::atomic_init(&flag, value)`，但是该方法已被弃用，推荐使用构造函数`std::atomic<T> flag(value)`)</font>
+    - 拷贝构造函数被禁用，但是可以使用类型为T的变量为其赋值，且内存序默认为顺序一致性(`std::memory_order_seq_cst`).例如:`std::atomic<int> flag = 0;`
+    - `is_lock_free()`：可以查看`std::atomic` 对象是否具有lock_free特性，该特性可以在多线程访问该对象时不会导致线程阻塞
+    - `store(T val, memory_order sync = memory_order_seq_cst)`：修改被封装的值，`std::atomic::store` 函数将类型为 T 的参数 val 复制给原子对象所封装的值。T 是 `std::atomic` 类模板参数。另外参数 sync 指定内存序(Memory Order)
+    - `load(memory_order sync = memory_order_seq_cst)`：读取被封装的值，参数 sync 设置内存序(Memory Order)
+    - `T exchange (T val, memory_order sync = memory_order_seq_cst)`：读取并修改被封装的值，exchange 会将 val 指定的值替换掉之前该原子对象封装的值，并返回之前该原子对象封装的值，整个过程是原子的(因此exchange 操作也称为 read-modify-write 操作)。sync参数指定内存序(Memory Order)
+        ```
+        std::atomic<int> foo(0); // 全局的原子对象 foo
+        std::atomic<int> bar = 0;   //使用类型为int的变量为其赋值
+        
+        void set_foo(int x)
+        {
+            foo.store(x, std::memory_order_relaxed); // 设置(store) 原子对象 foo 的值
+            // foo = x;     //使用类型为int的变量为其赋值
+        }
+
+        void copy_foo_to_bar()
+        {
+        
+            // 如果 foo == 0，则该线程 yield,
+            // 在 foo == 0 时, 实际也是隐含了类型转换操作,
+            // 因此也包含了 operator T() const 的调用.
+            while (foo == 0) std::this_thread::yield();
+        
+            // 实际调用了 operator T() const, 将foo 强制转换成 int 类型,
+            // 然后调用 operator=().
+            bar = static_cast<int>(foo);
+        }
+        
+        void print_bar()
+        {
+            int x;
+            do {
+                x = bar.load(std::memory_order_relaxed); // 读取(load) 原子对象 foo 的值
+            } while (x == 0);
+            std::cout << "bar: " << x << '\n';
+        }
+
+        void exchange_bar(int value)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            int x = bar.exchange(value);
+            std::cout << "bar: " << x << "\n";
+        }
+        
+        int main ()
+        {
+            std::thread first(print_bar); // 线程 first 打印 foo 的值
+            std::thread second(set_foo, 10); // 线程 second 设置 foo 的值
+            std::thread third(copy_foo_to_bar);
+            std::thread forth(exchange_bar ,100);   //用100替换bar的值并返回原来的值10
+            first.join();
+            second.join();
+            third.join();
+            forth.join();
+
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::thread fifth(print_bar);
+            fifth.join();
+            return 0;
+        }
+        ```
+    - `bool compare_exchange_weak (T& expected, T val, memory_order sync = memory_order_seq_cst)` 和 `compare_exchange_weak (T& expected, T val, memory_order success, memory_order failure)`：
+        - 比较并交换被封装的值(weak)与参数 expected 所指定的值是否相等，如果：
+            1. 相等，则用 val 替换原子对象的旧值。
+            2. 不相等，则用原子对象的旧值替换 expected ，因此调用该函数之后，如果被该原子对象封装的值与参数 expected 所指定的值不相等，expected 中的内容就是原子对象的旧值。
+
+        - 该函数通常会读取原子对象封装的值，如果比较为 true(即原子对象的值等于 expected)，则替换原子对象的旧值，但整个操作是原子的，在某个线程读取和修改该原子对象时，另外的线程不能对读取和修改该原子对象
+
+        - 针对第二个函数，内存序（Memory Order）的选择取决于比较操作结果，如果比较结果为 true(即原子对象的值等于 expected)，则选择参数 success 指定的内存序，否则选择参数 failure 所指定的内存序。
+
+        - 该函数直接比较原子对象所封装的值与参数 expected 的物理内容，所以某些情况下，对象的比较操作在使用 operator==() 判断时相等，但 compare_exchange_weak 判断时却可能失败，因为对象底层的物理内容中可能存在位对齐或其他逻辑表示相同但是物理表示不同的值(比如 true 和 2 或 3，它们在逻辑上都表示"真"，但在物理上两者的表示并不相同)。
+        
+        - weak 版本的 compare-and-exchange 操作允许(spuriously 地)返回 false(即原子对象所封装的值与参数 expected 的物理内容相同，但却仍然返回 false)，不过在某些需要循环操作的算法下这是可以接受的，并且在一些平台下 compare_exchange_weak 的性能更好 。如果 compare_exchange_weak 的判断确实发生了伪失败(spurious failures)——即使原子对象所封装的值与参数 expected 的物理内容相同，但判断操作的结果却为 false，compare_exchange_weak函数返回 false，并且参数 expected 的值不会改变。
 
 
 
