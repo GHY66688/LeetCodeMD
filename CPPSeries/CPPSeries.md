@@ -1720,6 +1720,7 @@ int main ()
         - 该函数直接比较原子对象所封装的值与参数 expected 的物理内容，所以某些情况下，对象的比较操作在使用 operator==() 判断时相等，但 compare_exchange_weak 判断时却可能失败，因为对象底层的物理内容中可能存在位对齐或其他逻辑表示相同但是物理表示不同的值(比如 true 和 2 或 3，它们在逻辑上都表示"真"，但在物理上两者的表示并不相同)。
 
         - weak 版本的 compare-and-exchange 操作允许(spuriously 地)返回 false(即原子对象所封装的值与参数 expected 的物理内容相同，但却仍然返回 false)，不过在某些需要循环操作的算法下这是可以接受的，并且在一些平台下 compare_exchange_weak 的性能更好 。如果 compare_exchange_weak 的判断确实发生了伪失败(spurious failures)——即使原子对象所封装的值与参数 expected 的物理内容相同，但判断操作的结果却为 false，compare_exchange_weak函数返回 false，并且参数 expected 的值不会改变。
+    -  `bool compare_exchange_strong (T& expected, T val, memory_order sync = memory_order_seq_cst)` 和 `compare_exchange_strong (T& expected, T val, memory_order success, memory_order failure)`：
 
 
 
