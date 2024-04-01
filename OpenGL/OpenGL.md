@@ -64,7 +64,7 @@ int main(void)
 }
 ```
 
-##使用GLEW绘制三角形
+## 使用GLEW绘制三角形
 - 需要使用**顶点缓冲区**(一系列字节存放在VRAM中)以及**着色器**(一套在GPU上执行的程序)
 - 顶点缓冲区
 ```
@@ -218,7 +218,7 @@ static ShaderProgrameSource ParseShader(const std::string& filepath)
 }
 ```
 
-##索引缓冲区
+## 索引缓冲区
 - 可以重用顶点，避免显存浪费
 - **索引缓冲区类型必须是`unsigned int`**
 - 使用索引缓冲区之前，也必须要指定`position`数组缓冲区，且启动顶点以及指定顶点属性，然后再创建索引缓冲区
@@ -397,7 +397,7 @@ GLCall(glBindVertexArray(vao));
   - 这是因为在关闭绘图窗口后，就失去了有效的openGL上下文和GLGetError，然后就会执行`while (glGetError() != GL_NO_ERROR);`；此时有两种方法，一种是创建缓冲区时使用new分配，在`glfwTerminate();`前delete掉它们。另外一种是在glfw的作用域中额外增加一个作用域，并将代码置于其中
 
 
-##将VAO抽象成类
+## 将VAO抽象成类
 - 需要创建一个`VertexBufferLayout`类用来存储不同VertexBuffer的布局，例如：需要绘制的顶点的大小，属性、绘制下一个顶点需要的步长等，代码如下
   - `VertexBufferElement`只是为了进行vector存储的时候方便而创建的一个类，用来存储VertexBuffer的布局，为`GLCall(glVertexAttribPointer());`做准备，用来指定顶点的属性
   - 后续的模板函数也只是为了进行存储的时候方便进行，如有需要可以增加对应模板 例如考虑void类 int类等等
@@ -496,7 +496,7 @@ void VertexArray::AddBuffer(const VertexBuffer& vb, const VertexBufferLayout& la
 }
 ```
 
-##将着色器抽象成类
+## 将着色器抽象成类
 - `Shader`中的`m_FilePath`仅供调试用，也可以不设置；而`m_UniformLocationCache`则是为了减少执行`GetUniformLocation`的次数以提高性能
 ```
 struct ShaderProgrameSource
@@ -659,7 +659,7 @@ unsigned int Shader::GetUniformLocation(const std::string& name)
 }
 ```
 
-##编写renderer
+## 编写renderer
 - 在openGL中解绑可能会导致性能下降，因为后面会重新进行Bind
 - 将openGL上下文中，将进行`VertexArray,IndexBuffer,Shader`的绑定置于Renderer类中，设置(`Draw(const VertexArray& va, IndexBuffer& ib, Shader& shader) const`)，但是其中的shader会在上下文环境中再次进行绑定，所以在Draw函数中也可以不绑定；此外，还将`glClear`移动到了Renderer类中
 ```
@@ -686,7 +686,7 @@ void Renderer::Draw(const VertexArray& va, const IndexBuffer& ib, const Shader& 
 
 - 基本上在实际运用过程中会用材质(**material**)代替着色器，材质其实就是一个着色器加上该着色器所有的统一变量，当把材质传递给renderer时，renderer会自动绑定对应着色器并设置统一变量
 
-##纹理(**texture**)
+## 纹理(**texture**)
 - 纹理可以理解为一种画笔(???)，可以在展示的矩形上增加东西，例如：一张图片；一根线条等等
 - 从[github](github/nothings/stb)上下载`stb_image.h`，并创建一个`stb_image.cpp`编译一下
 ```
@@ -833,7 +833,7 @@ void main()
 GLCall(glEnableVertexAttribArray(i));
 ```
 
-##混合(Blending)
+## 混合(Blending)
 ![img](./OpenGL_img/混合.png)
 - 混合是决定如何将输出颜色(`output`)与目标缓冲区(`target buffer`)中的已经存在的颜色结合起来，(例如：半透明的红色玻璃和蓝色玻璃，混合处会变成紫色，其中output就是指fragment shader输出的颜色，此处为蓝色；target buffer就是要画蓝色玻璃的区域);**一般src是纹理，dest为基底**
 ![img](./OpenGL_img/混合控制函数.png)
@@ -844,7 +844,7 @@ GLCall(glEnableVertexAttribArray(i));
   ![img](./OpenGL_img/混合例子.png)
   - 上面使用的`GL_SRC_ALPHA`和`GL_ONE_MINUS_SRC_ALPHA`就是把src的alpha值当做src的RGBA因子，把1-alpha_src当做dest的RGBA因子(例如，src的alpha为0.5， 则计算GL_FUNC_ADD时，就是`src * 0.5 + dest * (1 - 0.5) = 0.5 * (src + dest)`)，然后将计算得到的结果进行输出
 
-##数学库
+## 数学库
 [下载数学库](github.com/g-truc/glm)
 - 下载官方指定glm库，该库中的矩阵均以列为主
     ```
