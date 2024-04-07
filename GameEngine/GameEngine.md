@@ -34,6 +34,9 @@ MG::Application* MG::CreateApplication()
 
 ## Logging
 [第三方库](https://github.com/gabime/spdlog)
+- 设定想要的输出样式，并宏定义一些输入函数
+- 使用`shared_ptr`防止内存溢出
+
 
 ## Premake
 - [premake5 alpha16](https://github.com/premake/premake-core)
@@ -42,6 +45,7 @@ MG::Application* MG::CreateApplication()
 - 使用lua编写Premake文件
 - 直接点击`GenerateProject.bat`生成对应的sln和其他必要文件
 - 进行<font color="red">{COPY} </font>时，由于第一次并没有生成对应目录 ，需要执行第二次才能够正常运行程序
+- <font color="red">必须使用`#include"MGpch.h`而不能使用`#include"../MGpch.h`，否则会报找不到MGpch.h的错误</font>
 ```
 //premake5.lua
 
@@ -57,6 +61,13 @@ workspace "MiniEngine"
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}" //输出路径(模式-系统-架构)，例如Debug-Windows-x64
 
+
+-- Include directories relative to root folder (solution directory)
+IncludeDir = {}                                         //创建一个lua table，用来存储需要包含的头文件目录路径
+IncludeDir["GLFW"] = "MiniEngine/vendor/GLFW/include"   //加入到头文件目录路径中，相当于是编译器头文件路径，可以直接使用#include"glfw.h"等等，而无需写出相对路径
+
+include "MiniEngine/vendor/GLFW"                        //负责将该目录下的premake5.lua复制到该文件中
+
 project "MiniEngine"
 	location "MiniEngine"   //所在文件夹(MiniEngine.sln目录下的MiniEngine文件夹)
 	kind "SharedLib"        //设置生成类型，因为是dll 所以使用SharedLib
@@ -64,6 +75,9 @@ project "MiniEngine"
 
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")   //二进制文件生成路径 例如:bin/Debug-Winodws-x64/MiniEngine
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")   //中间文件生成路径
+
+    pchheader "MGpch.h"                     //相当于对项目MiniEngine 设置使用预编译头
+    pchsource "MiniEngine/src/MGpch.cpp"    //相当于VS中对该MGpch.cpp文件设置属性，创建预编译头
 
     files       //所需的文件类型
     {
@@ -157,9 +171,104 @@ project "SandBox"
 ```
 
 
-## Event Sysytem
+## Event System
 - 设置事件发送Application
     - 鼠标事件：鼠标点击时的position以及button
+    - 按键事件：键盘点击 释放、以及重复
+    - App事件：窗口大小改动、关闭
 - 为窗口类设置回调函数，如果窗口触发了某些事件，则会回调并告诉Application
+    - 在WindowsWindow.cpp中实现，通过glfw自带的callback函数设置对应数据并创建对应的event类，通过设置WindowData中的EventCallback(event)来实现回调
+        ```
+        //WindowsWindow::Init()
+        
+        //Set GLFW callback
+        glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+                data.Width = width;
+                data.Height = height;
+
+                WindowResizeEvent event(width, height);
+                data.EventCallback(event);
+            });
+
+        glfwSetWindowCloseCallback(m_Window, [](GLFWwindow* window)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+                WindowCloseEvent event;
+                data.EventCallback(event);
+            });
+
+        glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+
+                switch (action)
+                {
+                    case GLFW_PRESS:
+                    {
+                        KeyPressedEvent event(key, 0);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    case GLFW_RELEASE:
+                    {
+                        KeyReleasedEvent event(key);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    case GLFW_REPEAT:
+                    {
+                        KeyPressedEvent event(key, 1);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            });
+
+
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+
+                switch (action)
+                {
+                    case GLFW_PRESS:
+                    {
+                        MouseButtonPressedEvent event(button);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    case GLFW_RELEASE:
+                    {
+                        MouseButtonReleasedEvent event(button);
+                        data.EventCallback(event);
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            });
+
+        glfwSetScrollCallback(m_Window, [](GLFWwindow* window, double xOffset, double yOffset)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+                MouseScrolledEvent event((float)xOffset, (float)yOffset);
+                data.EventCallback(event);
+            });
+
+        glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xPos, double yPos)
+            {
+                WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
+                MouseMovedEvent event((float)xPos, (float)yPos);
+                data.EventCallback(event);
+
+            });
+        ```
 - Application需要设置事件监听
-- Event类需要设置不同的Event事件(设置事件调度程序，根据参数实现自动调用不同函数(*通过虚函数实现？？*))，例如Mouse、KeyBoard等
+- Event类需要设置不同的Event事件(设置事件调度程序，根据参数实现自动调用不同函数，例如Mouse、KeyBoard等
+
+## Window
+- 创建Window接口，供其他平台开发(目前仅实现了Windows)
