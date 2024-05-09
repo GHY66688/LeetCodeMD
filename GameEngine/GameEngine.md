@@ -236,8 +236,69 @@ project "SandBox"
 
 ## ImGUI
 - 通过dispatch机制，使得能够触发ImGui事件
-**TODO**：存在频闪问题，且触发一种按键后，无法再次进行触发)
+- docking：停靠窗口，将界面放到任何地方
+- Viewports：
+**TODO**：存在频闪问题，且触发一种按键后，无法再次进行触发
 
 ## Input
 - 设置Input Poll，设置Input接口，并根据具体平台实现不同的Input类(仅实现了Windows)
 - 为了后续能够支持多种图形API，需要设置专属于自己引擎的KeyCodes；通过#ifdef等操作，根据具体平台使用不同的`KeyCodes.h`文件(目前仅实现了基于`glfw3.h`)
+
+
+## Rendering
+#### Renderer context
+- 将初始化context的OpenGL APi 抽象为一个函数，并设置接口，供以后支持不同图形库
+
+#### VB IB Layout
+- 建立一个VB和IB接口 并在具体的图形库API去实现VB以及IB
+- VA与shader密切相关，需要创建VextexBufferLayerout设置VA的布局
+- 创建一个BufferLayout类来存储VA的实际布局
+- 使用`std::initializer_list`设置Layout的构造函数，使得能够直接使用{{message}}的方式构建Layout，同时提高代码可读性，了解VB的实际布局
+#### VA
+- VA与shader密切相关，需要创建VextexBufferLayerout设置VA的布局
+
+#### RendererAPI
+- `RendererAPI`作为接口设置函数`SetClearColor`, `Clear`, `DrawIndexed`以及自己的`s_API`
+- `RenderCommand`则调用`RendererAPI`，并创建对应图形库的RendererAPI(目前为OpenGL)，用指针记录，就算发生内存泄漏也仅一个字节
+- `Renderer`则调用`RenderCommand`，负责开始和结束场景，并且调用`RenderCommand`进行图像绘制
+- `OpenGLRendererAPI`则作为`RendererAPI`的派生类，实现专注于OpenGL库的方法调用
+<font color = "red"> 为什么要多此一举创建RenderCommand并调用RendererAPI已经设置的方法，难道说只是为了将RendererAPI抽象为一个接口嘛 </font>
+
+
+#### ISSUE
+- 切换图形库API时，会导致需要编译整个渲染模块甚至是整个引擎，这并不是想要实现的
+    - 可以将采用不同图形库API的渲染模块编译成DLL，这样在运行过程中可以选择合适的进行调用，但是这样会极大降低性能 
+    - 创建一个Shader的接口(纯虚函数)，并使用不同图形库API 编写其派生类，在其中实现支持多图形库API；但是对于客户端而言，只能够看见Shader类
+
+## Camera
+- 计算实际的画面使用 projection * view * model * vertexPos(针对OpenGL 和glm 因为是按列存储；例如DirectX 则是按行存储，需要使用vertexPos * model * view * projection)
+- Camera实际上就是projection * view ，而model则是在object身上，vertexPos则是在mesh上
+- 在`BeginScene`中初始化Camera，同时将Camera计算获得的PV(projection and view)作为uniform输入到Shader中
+- 正交相机(orthographic camera)：适用于2D环境，并不存在近大远小的透视
+- 为了使得相机移动尽可能smooth，不能够使用键盘事件回调函数
+
+## DeltaTime
+- 为了防止某些功能模块更新频率过快，导致影响体验(例如，相机移动，帧率越高 移动越快，同时也会影响性能<font color ="blue">(我猜的)</font>)，使用DeltaTime来定时更新功能模块，在所有机器上都设置固定更新频率，提高体验感
+- 使用移动速度乘上DeltaTime，即可实现在不同帧率的机器上，在同一时间内到达相同位置，DeltaTime越短，说明帧率越高，渲染的画面次数越多
+
+
+## Material
+- 本质就是一个shader 加上一堆uniforms，通过设置不同的uniforms渲染出不同的效果
+- 通过将shader抽象，并调试其中的uniforms，同时调用`MG::Renderer::Submit()`，传入matrial而不是shader，可以进一步简化步骤；并且通过将使用相同shader的object整合到一起，可以有效地降低性能消耗，而不用来回绑定shader
+
+
+## Texture
+- 读取`texture.glsl`文件，获得对应的vertexShader和fragmentShader
+- **小Tips:**通过在`texture.glsl`文件中，加入`uniform u_texture`以及`uniform u_Color`，并在输出Color时进行两者相乘(`color = texture(u_Texture, v_TexCoord) * u_Color;`)实现Bind单个Shader，但是能够绘制两种不同的图形(使用Texture的 以及纯色)；**具体做法：**
+    1. 如果想要使用Texture，，则将u_Color设置为全白即可(即glm::vec4(1.0f))，这样只会出现Texture，而不会有颜色的影响
+        ```
+        //set color to white
+        s_Data->TextureShader->SetFloat4("u_Color", glm::vec4(1.0f));
+        ```
+    2. 如果只想使用纯色，则在`BeginScene`期间，就创建一个`WhiteTexture`，通过手动创建像素为1 * 1的白色像素点，实现白色的Texture，这样只会出现设置的纯色，而不会使用Texture
+        ```
+        s_Data->TextureShader->SetFloat4("u_Color", color);
+        //bind white texture
+        s_Data->WhiteTexture->Bind();
+        ```
+    3. 如果两者都想使用，则同时输入即可
