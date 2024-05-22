@@ -281,7 +281,7 @@
 ## 引用(reference)
 - 与指针不同，引用必须引用一个已经存在的变量，本身不是变量不会占用内存空间，相当与给被引用对象创建了别名
 
-##类(class)与结构体(struct)的区别
+## 类(class)与结构体(struct)的区别
 - c++保留struct是为了对c有一定的兼容性
 - 类默认私有，结构体默认公有
 - 具体什么情况使用什么，根据个人观点而定。一般来说，struct用来存储一些简单的变量以及简单的方法，而class则实现一些较为复杂的东西以，继承用class更好
@@ -348,7 +348,7 @@ public:
     void Hello();
 };
 
-Singleton* Siongleton::s_Instance = nullptr;
+Singleton* Singleton::s_Instance = nullptr;
 
 int main()
 {
@@ -843,15 +843,11 @@ a = &b; //报错
     int main()
     {
         //尽量避免以下写法
-        Entity a = "name";  //报错，无法从const char[]
-                            //转向Entity
+        Entity a = "name";  //报错，无法从const char[]转向Entity
         Entity b = std::string("name"); //正常运行
-        Entity a = 22;  //正常运行，如果对应构造函数有explicit
-                        //关键字，则报错
-        Print(22);      //正常运行，如果对应构造函数有explicit
-                        //关键字，则报错
-        Print("name");  //报错，不存在从const char[]
-                        //到Entity的构造函数
+        Entity a = 22;  //正常运行，如果对应构造函数有explicit关键字，则报错
+        Print(22);      //正常运行，如果对应构造函数有explicit关键字，则报错
+        Print("name");  //报错，不存在从const char[]到Entity的构造函数
         Print(std::string("name")); //正常运行
         Print(Entity("name"));      //正常运行
     }
@@ -1035,7 +1031,7 @@ int main()
     - 存在一个free list会实时记录哪块儿内存块空闲以及它们的位置，当进行new操作时，便会寻找合适的内存块进行分配
       ```
       Entity* entity0 = new Entity();   //调用构造函数
-      Entity* entity1 = (Entity*)malloc(sizeof(Entity)) //不调用构造函数
+      Entity* entity1 = (Entity*)malloc(sizeof(Entity)) //不调用构造函数，但是只分配的内存，无法访问Entity中的函数和变量
       //在c中不需要将类型转换为Entity*，但是在c++中需要转换
       ```
 
@@ -1105,7 +1101,7 @@ int main()
         }
     }
 
-    //使用捕获时，需要写成如下
+    //不管是否使用捕获，都可以写成如下
     #include<functional>
     void ForEach(const std::vector<int>& values, const std::function<void(int)>& f)
     {

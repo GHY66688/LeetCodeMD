@@ -302,3 +302,8 @@ project "SandBox"
         s_Data->WhiteTexture->Bind();
         ```
     3. 如果两者都想使用，则同时输入即可
+
+## Batch Rendering
+- 本质就是将所有的顶点信息以及索引信息存储到一个确定的数组中，该数组有提前预设的大小；在绘制过程中，该数组只会调用一次DrawCall来减小DrawCall的性能损失
+- 当顶点数量大于预设的数组大小时，则需要另外创建一个数组并额外调用一次DrawCall，以此类推
+- Texture slot：一般来说有32个slot；其中0号slot插槽基本是用来存储white_texture的，剩下的31个slot则用来绑定不同的texture；当一个数组调用DrawCall时，则会调用里面需要用到的textures；而当该数组中调用的textures数量大于31个，则说明在此次DrawCall中无法完全全部绘制，因为需要重新绑定新的texture，那么则需要将使用新的texture的顶点重新构建一个数组并执行一次DrawCall
