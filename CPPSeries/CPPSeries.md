@@ -328,7 +328,8 @@
     ```
 
 ## 设计模式
-**单例模式(singletons)**
+
+#### 单例模式(singletons)
 - 仅创建一个实例，并其生命周期为整个程序
 - 构造函数和析构函数不能够被外部访问，防止实例化，需要将这两个函数置于private
 - 防止进行复制实例化，可以将拷贝构造函数删除
@@ -377,7 +378,6 @@ private:
 };
 
 
-
 int main()
 {
     Singleton::Get().Hello();
@@ -387,6 +387,92 @@ int main()
 
 }
 ```
+
+
+- **饿汉模式**：在类被加载的时候才会创建该类的实例对象(**空间换时间**)
+    - 使用静态成员变量创建本类对象(就是上面的复杂版本) : **线程安全**
+    ```
+    private:
+        Singleton(){};
+        static Singleton s_instance;
+        Singleton(const Singleton&) = delete;
+        Singleton& operator=(const Singleton&) = delete;
+
+    public:
+        static Singleton& Get()
+        {
+            return s_instance;
+        }
+
+    //类外初始化
+    Singleton Singleton::s_instance;
+    
+    ```
+    - 在静态代码块中创建本类对象(**半个饿(懒)汉模式**) ：**线程不安全**(同个静态对象有可能会同时在同一个地址生成多次；内部的Set函数会出现线程错误，导致最终结果与期望不符)
+    ```
+    private:
+        Singleton() {};
+        Singleton(const Singleton&) = delete;
+        Singleton& operator=(const Singleton&) = delete;
+
+    public:
+        Singleton& Get()
+        {
+            static Singleton s_instance;
+            return s_instance;
+        }
+    ```
+
+
+
+
+- **懒汉模式**：在类被加载时不会创建该类的实例对象，只有在首次要使用该实例时才会创建(**线程不安全**(同时创建多个对象，且Set函数会出现线程错误)) (**时间换空间**)
+    ```
+    priavte:
+        Singleton(){};
+        Singleton(const Singleton&) = delete;
+        Singleton& operator=(const Singleton&) = delete;
+
+        static Singleton* s_instance;
+
+    public:
+        static Singleton& Get()
+        {
+            if(s_instance == nullptr)
+            {
+                s_instance = new Singleton();
+            }
+            return *s_instance;
+        }
+    
+
+
+    //类外初始化
+    Singleton* Singleton::s_instance = nullptr;
+    ```
+
+    - 加锁保证只创建一个对象
+    ```
+    public:
+        static Singleton& Get()
+        {   //双重锁模式
+            if(s_instance == nullptr)   //如果已有，直接返回，不在这边加锁以减小加减锁的开销
+            {
+                s_mutex.lock();
+                if(s_instance == nullptr)   //双重判定
+                {
+                    s_instance = new Singleton();
+                }
+                s_mutex.unlock();
+            }
+            return *s_instance;
+
+        }
+
+    private:
+        static Singleton* s_instance;
+        static mutex s_mutex;
+    ```
 
 ## 枚举(enums)
 - 一些值的集合，给一个值指定一个名称
@@ -404,21 +490,22 @@ int main()
     ```
 
 ## 类(class)
-- **构造函数(constructor)**:
-  - 会有默认构造函数
-  - 可以进行函数重载
-  - 当不需要默认构造函数时，可以`class_name() = delete`
-  - 直接调用类内静态函数或变量时，构造函数并不会被调用
-- **析构函数(destructor)**：
-  - 对象生命周期结束后(销毁后)自动调用
-  - 可以用来释放申请的内存空间
-- **继承(inheritance)**
-  - 会继承父类的所有东西包括变量和函数
-  - `class sub_class_name : public bas_class_name {};`
-- **虚函数(virtual function)**
-  - 问题来源：在类中正常声明函数，当调用这个函数时，总会去调用属于这个类型的函数
-  - 虚函数引入了要动态分配的东西，因此引入了虚表(vtable)的概念用来编译，其中包含了类中所有虚函数映射列表 **(即想重写一个函数，必须把基类中的原函数设为虚函数，同时在子类的重写的那个函数后面加上override(c++11标准允许加入override标记)提高代码可读性)**
-  - 会有内存开销，需要用来存储虚表，基类中有一个指针专门指向虚表；每次调用虚函数都需要去遍历虚表，带来性能损失(但是其实影响很小)
+### **构造函数(constructor)**:
+- 会有默认构造函数
+- 可以进行函数重载
+- 当不需要默认构造函数时，可以`class_name() = delete`
+- 直接调用类内静态函数或变量时，构造函数并不会被调用
+### **析构函数(destructor)**：
+- 对象生命周期结束后(销毁后)自动调用
+- 可以用来释放申请的内存空间
+### **继承(inheritance)**
+- 会继承父类的所有东西包括变量和函数
+- `class sub_class_name : public bas_class_name {};`
+### **虚函数(virtual function)**
+- 虚表存储在**只读数据段**；虚函数存储在**代码段**
+- 问题来源：在类中正常声明函数，当调用这个函数时，总会去调用属于这个类型的函数
+- 虚函数引入了要动态分配的东西，因此引入了虚表(vtable)的概念用来编译，其中包含了类中所有虚函数映射列表 **(即想重写一个函数，必须把基类中的原函数设为虚函数，同时在子类的重写的那个函数后面加上override(c++11标准允许加入override标记)提高代码可读性)**
+- 会有内存开销，需要用来存储虚表，基类中有一个指针专门指向虚表；每次调用虚函数都需要去遍历虚表，带来性能损失(但是其实影响很小)
 
     ```
     class Entity
@@ -478,256 +565,256 @@ int main()
 
     ```
 
-- **虚析构函数**
-  - 一个基类A，派生类B，创建了类别B的对象b，但是我需要将其引用成类别A；当需要进行删除时，需要调用类别B的析构函数而不是类别A的析构函数
-  - 不是覆写一个析构函数，而是加上一个析构函数
-  - 通过将基类A的析构函数加上`virtual`可以告诉编译器在调用该虚析构函数之前还有可能需要调用派生类的析构函数，如果有的话
-    ```
-    class Base
-    {
-    public:
-        Base(){std::cout << "Base Constructor" << std::endl;}
-        virutal ~Base(){std::cout << "Base Desturctor" << std::endl;}       //虚析构函数
-    };
+### 虚析构函数
+- 一个基类A，派生类B，创建了类别B的对象b，但是我需要将其引用成类别A；当需要进行删除时，需要调用类别B的析构函数而不是类别A的析构函数
+- 不是覆写一个析构函数，而是加上一个析构函数
+- 通过将基类A的析构函数加上`virtual`可以告诉编译器在调用该虚析构函数之前还有可能需要调用派生类的析构函数，如果有的话
+```
+class Base
+{
+public:
+    Base(){std::cout << "Base Constructor" << std::endl;}
+    virutal ~Base(){std::cout << "Base Desturctor" << std::endl;}       //虚析构函数
+};
 
-    class Derived : public Base
-    {
-    Public:
-        Derived(){my_array = new int[50]; std::cout << "Derived Constructor" << std::endl;}
-        ~Derived(){delete my_Array; std::cout << "Derived Destructor" << std::endl;}
-    private:
-        int* my_array;
-    };
+class Derived : public Base
+{
+Public:
+    Derived(){my_array = new int[50]; std::cout << "Derived Constructor" << std::endl;}
+    ~Derived(){delete my_Array; std::cout << "Derived Destructor" << std::endl;}
+private:
+    int* my_array;
+};
 
-    int main()
+int main()
+{
+    Base* base = new Base();    //调用Base的构造函数
+    delete base;                //调用Base的析构函数
+    std::cout << "------------------\n";
+    Derived* derived = new Derived();   //调用Base、Derived的构造函数
+    delete derived;     //调用Derived、Base的析构函数
+    std::cout << "------------------\n";
+    Base* a = new Derived();
+    delete a;
+    //不使用虚析构函数，只会调用Base的构造函数，Derived的构造函数以及Base的析构函数
+    //使用虚析构函数后，会调用Base的构造、Derived的构造以及Derived的析构和Base的析构
+}
+```
+### 接口(interface)
+- 创建一个只包含未实现方法然后交由子类去实现的类称为接口；在其他语言中有`interface`关键字声明是接口，但在c++中接口其实就是一个只有**纯虚函数**的类
+- **纯虚函数**：允许我们定义一个在基类中没有实现的函数，强制子类去实现
+- 接口无法实例化，因为不包含方法实现；只能实例化一个实现了所有纯虚函数的类
+- 在原来虚函数的基础上，去掉函数本体{}，并将其函数=0；例如`virtual std::string GetName() = 0;`
+- 若有父类和子类都继承了接口，则子类可以不定义纯虚函数，通过调用父类定义的纯虚函数即可
+```
+class Printable
+{
+public:
+    virtual void GetClassName() = 0;    //纯虚函数
+};
+
+class Entity : public Printable
+{
+public:
+    virtual std::string GetName() { return "Entity"; }
+    void GetClassName() override    //实现基类的纯虚函数
     {
-        Base* base = new Base();    //调用Base的构造函数
-        delete base;                //调用Base的析构函数
-        std::cout << "------------------\n";
-        Derived* derived = new Derived();   //调用Base、Derived的构造函数
-        delete derived;     //调用Derived、Base的析构函数
-        std::cout << "------------------\n";
-        Base* a = new Derived();
-        delete a;
-        //不使用虚析构函数，只会调用Base的构造函数，Derived的构造函数以及Base的析构函数
-        //使用虚析构函数后，会调用Base的构造、Derived的构造以及Derived的析构和Base的析构
+        std::cout << "Entity" << std::endl;
     }
-    ```
-- **接口(interface)**
-  - 创建一个只包含未实现方法然后交由子类去实现的类称为接口；在其他语言中有`interface`关键字声明是接口，但在c++中接口其实就是一个只有**纯虚函数**的类
-  - **纯虚函数**：允许我们定义一个在基类中没有实现的函数，强制子类去实现
-  - 接口无法实例化，因为不包含方法实现；只能实例化一个实现了所有纯虚函数的类
-  - 在原来虚函数的基础上，去掉函数本体{}，并将其函数=0；例如`virtual std::string GetName() = 0;`
-  - 若有父类和子类都继承了接口，则子类可以不定义纯虚函数，通过调用父类定义的纯虚函数即可
-    ```
-    class Printable
+};
+
+class Player : public Entity    //只需要继承Entity，不用继承Printable
+{
+private:
+    std::string m_Name;
+public:
+    Player(std::string name)
+        : m_Name(name) {}
+
+    std::string GetName() override  //重写Entity中的GetName
     {
-    public:
-        virtual void GetClassName() = 0;    //纯虚函数
-    };
-
-    class Entity : public Printable
-    {
-    public:
-        virtual std::string GetName() { return "Entity"; }
-        void GetClassName() override    //实现基类的纯虚函数
-        {
-            std::cout << "Entity" << std::endl;
-        }
-    };
-
-    class Player : public Entity    //只需要继承Entity，不用继承Printable
-    {
-    private:
-        std::string m_Name;
-    public:
-        Player(std::string name)
-            : m_Name(name) {}
-
-        std::string GetName() override  //重写Entity中的GetName
-        {
-            return m_Name;
-        }
-
-        void GetClassName() override    //实现基类的纯虚函数
-        {
-            std::cout << "Player" << std::endl;
-        }
-
-    };
-
-    void Print(Printable* obj)
-    {
-        obj->GetClassName();
+        return m_Name;
     }
 
-    int main()
+    void GetClassName() override    //实现基类的纯虚函数
     {
-        //Printable a = new Printabel();    //报错，无法实例化
-        Entity* b = new Entity();   //Entity实现了基类纯虚函数可以实例化
-        Print(b);   //输出Entity
-
-        Player* p = new Player("name");
-        //如果Player还继承了Printable类，需要表明是public继承，否则下面的代码会报错，虽然不会影响实际执行，但是我也不知道为什么。且需要实现GetClassName方法，不然无法实例化
-        //如果仅继承Entity类，若Player类中并没有实现GetClassName，则会调用Entity类中的GetClassName，能够实例化
-
-        Print(p);   //若继承了Printable，则必须实现GetClassName
-                    //此时输出name
-                    //若仅继承Entity，若不实现GetClassName，则输出Entity，若实现GetClassName，则输出Player
-
+        std::cout << "Player" << std::endl;
     }
-    ```
 
-- **成员变量初始化列表**
-  - 在构造函数名后，加上`:`，然后在按照类中的变量顺序，进行初始化，若不按顺序写，有些编译器会报警，并且，初始化时会按照成员变量的顺序进行初始化操作，会发生各种错误
-  - 如果是派生类的构造函数，<font color = 'red'>不能够使用初始化列表，因为在派生类中并没有声明这些变量，这些变量是从基类中继承得来的</font>
-    ```
-        class Entity
-        {
-        private:
-            int m_Score;
-            std::string m_Name;
-        public:
-            Entity()
-                : m_Score(10), m_Name("Unknown) //
-            {}
-        }
-    ```
-  - 如果不使用初始化列表，会执行两次构造函数，导致性能浪费，因此，尽可能多地使用初始化列表
-    ```
-    #include<iostream>
-    #include<string>
+};
 
-    class Example
-    {
-    public:
-        Example()
-        {
-            std::cout << "created Example" << std::endl;
-        }
+void Print(Printable* obj)
+{
+    obj->GetClassName();
+}
 
-        Example(int x)
-        {
-            std::cout << "created Example with " << x << std::endl;
-        }
-    };
+int main()
+{
+    //Printable a = new Printabel();    //报错，无法实例化
+    Entity* b = new Entity();   //Entity实现了基类纯虚函数可以实例化
+    Print(b);   //输出Entity
 
+    Player* p = new Player("name");
+    //如果Player还继承了Printable类，需要表明是public继承，否则下面的代码会报错，虽然不会影响实际执行，但是我也不知道为什么。且需要实现GetClassName方法，不然无法实例化
+    //如果仅继承Entity类，若Player类中并没有实现GetClassName，则会调用Entity类中的GetClassName，能够实例化
+
+    Print(p);   //若继承了Printable，则必须实现GetClassName
+                //此时输出name
+                //若仅继承Entity，若不实现GetClassName，则输出Entity，若实现GetClassName，则输出Player
+
+}
+```
+
+### 成员变量初始化列表
+- 在构造函数名后，加上`:`，然后在按照类中的变量顺序，进行初始化，若不按顺序写，有些编译器会报警，并且，初始化时会按照成员变量的顺序进行初始化操作，会发生各种错误
+- 如果是派生类的构造函数，<font color = 'red'>不能够使用初始化列表，因为在派生类中并没有声明这些变量，这些变量是从基类中继承得来的</font>
+```
     class Entity
     {
     private:
+        int m_Score;
         std::string m_Name;
-        Example example;        //这边会实例化一次
-
     public:
         Entity()
-        {
-            m_Name = "aaaa";
-            example = Example(8);   //这边又实例化一次
-        }
+            : m_Score(10), m_Name("Unknown) //
+        {}
+    }
+```
+- 如果不使用初始化列表，会执行两次构造函数，导致性能浪费，因此，尽可能多地使用初始化列表
+```
+#include<iostream>
+#include<string>
 
-        //如果使用初始化列表
-        Entity()
-            : example(8)
-        {
-            m_Name = "aaaa";
-        }
-    };
-
-    int main()
+class Example
+{
+public:
+    Example()
     {
-        Entity e;   //输出 created Example和
-                    //    created Example with 8
-                    //所以example实例化了两次
-
-                    //使用初始化列表，仅输出
-                    //created example with 8
+        std::cout << "created Example" << std::endl;
     }
 
-    ```
+    Example(int x)
+    {
+        std::cout << "created Example with " << x << std::endl;
+    }
+};
+
+class Entity
+{
+private:
+    std::string m_Name;
+    Example example;        //这边会实例化一次
+
+public:
+    Entity()
+    {
+        m_Name = "aaaa";
+        example = Example(8);   //这边又实例化一次
+    }
+
+    //如果使用初始化列表
+    Entity()
+        : example(8)
+    {
+        m_Name = "aaaa";
+    }
+};
+
+int main()
+{
+    Entity e;   //输出 created Example和
+                //    created Example with 8
+                //所以example实例化了两次
+
+                //使用初始化列表，仅输出
+                //created example with 8
+}
+
+```
     
-- **this关键字**
-  - 指代当前的这个对象，必须进行实例化
-  - 当某个成员函数需要调用类外函数，且类外函数的参数是该类时，便可以使用this
-  - 如果成员函数是const的，则必须将this进行转换变为const`const Entity* e = this;`
-  - this会根据需要进行隐式变换，从class_name\*到const class_name\*
-    ```
-    class Entity;   //声明，不然下面的Print函数会在运行时报错
-    void Print(Entity& e);  //声明，不然下面调用会报错
-    class Entity
+### this关键字
+- 指代当前的这个对象，必须进行实例化
+- 当某个成员函数需要调用类外函数，且类外函数的参数是该类时，便可以使用this
+- 如果成员函数是const的，则必须将this进行转换变为const`const Entity* e = this;`
+- this会根据需要进行隐式变换，从class_name\*到const class_name\*
+```
+class Entity;   //声明，不然下面的Print函数会在运行时报错
+void Print(Entity& e);  //声明，不然下面调用会报错
+class Entity
+{
+public:
+    Entity()
     {
-    public:
-        Entity()
-        {
-            Print(*this);
-        }
-    };
-
-    void Print(Entity& e)
-    {
-        std::cout << "hey" << std::endl;
+        Print(*this);
     }
-    ```
+};
 
-- **拷贝构造函数**：
-  - 在进行=赋值时会调用拷贝构造函数，类似`class_name(const class_name& other);`
-  - 浅拷贝：仅拷贝成员变量，即把被拷贝的对象的成员变量拷贝到新对象的对应的成员变量中。例如：`int a = b, char* c = d`；若不需要拷贝，直接将其`=delete`即可
-    ```
-    class Entity
+void Print(Entity& e)
+{
+    std::cout << "hey" << std::endl;
+}
+```
+
+### 拷贝构造函数：
+- 在进行=赋值时会调用拷贝构造函数，类似`class_name(const class_name& other);`
+- 浅拷贝：仅拷贝成员变量，即把被拷贝的对象的成员变量拷贝到新对象的对应的成员变量中。例如：`int a = b, char* c = d`；若不需要拷贝，直接将其`=delete`即可
+```
+class Entity
+{
+private:
+    char* m_Buffer;
+    int m_Size;
+public:
+    Entity(const char* str)
     {
-    private:
-        char* m_Buffer;
-        int m_Size;
-    public:
-        Entity(const char* str)
-        {
-            m_Size = strlen(str);
-            m_Buffer = new char[m_Size + 1];
-            memcpy(m_Buffer, str, m_Size);
-            m_Buffer[m_Size] = 0;   //防止传入的str没有空终止符，手动添加
-        }
-
-        ~Entity()
-        {
-            delete[] m_Buffer;
-        }
-
-        char& operator[](unsigned int index)
-        {
-            return m_Buffer[index];
-        }
-
-        friend std::ostream& operator<<(std::ostream& stream, const Entity& e);     //友元，可以访问私有变量
-    }
-
-    std::ostream& operator<<(std::ostream& stream, const Entity& e)
-    {
-        stream << Entity.m_buffer
-        return stream;
-    }
-
-    int main()
-    {
-        Entity a("name");   //a.m_Buffer指向"name"的内存空间
-        Entity b = a;       //由于是浅拷贝，b.m_Buffer同样指向"name"的内存空间
-        std::cout << a << std::endl;    //输出"name"
-        std::cout << b << std::endl;    //输出"name"
-
-        b[2] = 'b';     //两次均输出"nabe"
-
-        //最后会发生崩溃，因为同一个内存空间被delete两次，这是不允许的
-    }
-    ```
-  - 深拷贝：当成员变量中存在指针时，并且该指针指向一个堆上的内存空间。进行拷贝，则会按照要求在堆上重新申请一个内存空间给新对象，防止新对象与被拷贝对象的指针指向同一块内存空间，导致进行delete的时候出现碰撞，或者防止新对象修改内容时，将被拷贝对象的内容一起修改
-    ```
-    //只需要重写一个拷贝构造函数实现深拷贝即可
-    Entity(const Entity& other)
-        : m_Size(other.m_Size)
-    {
+        m_Size = strlen(str);
         m_Buffer = new char[m_Size + 1];
-        memcpy(m_Buffer, other.m_Buffer, m_Size + 1);
-        //因为已经知道other中有一个空终止符，直接m_Size + 1
+        memcpy(m_Buffer, str, m_Size);
+        m_Buffer[m_Size] = 0;   //防止传入的str没有空终止符，手动添加
     }
-    ```
+
+    ~Entity()
+    {
+        delete[] m_Buffer;
+    }
+
+    char& operator[](unsigned int index)
+    {
+        return m_Buffer[index];
+    }
+
+    friend std::ostream& operator<<(std::ostream& stream, const Entity& e);     //友元，可以访问私有变量
+}
+
+std::ostream& operator<<(std::ostream& stream, const Entity& e)
+{
+    stream << Entity.m_buffer
+    return stream;
+}
+
+int main()
+{
+    Entity a("name");   //a.m_Buffer指向"name"的内存空间
+    Entity b = a;       //由于是浅拷贝，b.m_Buffer同样指向"name"的内存空间
+    std::cout << a << std::endl;    //输出"name"
+    std::cout << b << std::endl;    //输出"name"
+
+    b[2] = 'b';     //两次均输出"nabe"
+
+    //最后会发生崩溃，因为同一个内存空间被delete两次，这是不允许的
+}
+```
+- 深拷贝：当成员变量中存在指针时，并且该指针指向一个堆上的内存空间。进行拷贝，则会按照要求在堆上重新申请一个内存空间给新对象，防止新对象与被拷贝对象的指针指向同一块内存空间，导致进行delete的时候出现碰撞，或者防止新对象修改内容时，将被拷贝对象的内容一起修改
+```
+//只需要重写一个拷贝构造函数实现深拷贝即可
+Entity(const Entity& other)
+    : m_Size(other.m_Size)
+{
+    m_Buffer = new char[m_Size + 1];
+    memcpy(m_Buffer, other.m_Buffer, m_Size + 1);
+    //因为已经知道other中有一个空终止符，直接m_Size + 1
+}
+```
 
 ## const
 - **常量指针**
