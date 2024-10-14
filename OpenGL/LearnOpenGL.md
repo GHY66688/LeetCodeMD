@@ -71,7 +71,7 @@
 
 ### 光源
 
-#### 平行光：
+#### 平行光(Directional Light)：
 ```
 struct Light {
     vec3 direction; //计算LightDir只需要对dircetion取反即可
@@ -82,7 +82,8 @@ struct Light {
 };
 ```
 
-#### 点光源：
+#### 点光源(Point Light)：
+![img](./LearnOpenGL_img/point%20light.png)
 - 考虑光线衰减(Attenuation)，按下式计算衰减值，使得该光线在刚开始时衰减不厉害(其中$d$为光源与片段之间的距离)，超过一定范围后迅速衰减
 ![img](./LearnOpenGL_img/attenuation.png)
 [附衰减表](https://wiki.ogre3d.org/tiki-index.php?page=-Point+Light+Attenuation)
@@ -112,3 +113,8 @@ void main()
     ...
 }
 ```
+
+#### 聚光(Spot Light)：
+![img](./LearnOpenGL_img/spot%20light.png)
+- $\theta$为内切光角(Inner CutOff Angle)：只要比该角度小，光强为1(最高)
+- $\phi$为外切光角(Outter Cutoff Angle)：只要比该角度大，则光强为0(最低)，在这两角之间，光强逐渐减少

@@ -816,6 +816,129 @@ Entity(const Entity& other)
 }
 ```
 
+
+## 菱形继承
+### 普通菱形继承：
+![img](./CPP_image/菱形继承.png)
+```
+class Person
+{
+public:
+    int _p;   
+};
+
+class Student : public Person
+{
+public:
+    int _num;   //学号
+}
+
+class Teacher : public Person
+{
+public:
+    int _id;    //职工号
+}
+
+class Assistant : public Student, public Teacher
+{
+public:
+    int _a;     
+}
+
+int main()
+{
+	Assistant a;
+	a.Student::_p = 1;
+	a.Teacher::_p = 2;
+	a._num = 3;
+	a._id = 4;
+	a._a = 5;
+}
+```
+#### 缺点：
+![img](./CPP_image/普通菱形继承结果.png)
+- **图解：** 
+    - 第一行为a.Student::_p
+    - 第二行为a._num
+    - 第三行为a.Teacher::_p
+    - 第四行为a._id
+    - 第五行为a._a
+- **数据冗余：** 图中Assistant中会存储**两份**_name；
+- **二义性：** 由于同时存储了两份_name，则无法使用`Assistant._name`来进行访问；而是需要指明其作用域`Assistant.::Student._name`才能够进行访问
+
+#### 虚拟菱形继承
+- 对第二层中的Student以及Teacher进行虚拟继承Person
+```
+/* ...*/
+class Student : virtual public Person
+...
+
+class Teacher : virtual public Person
+...
+
+int main()
+{
+	Assistant a;
+	a._p = 1;
+	a._num = 3;
+	a._id = 4;
+	a._a = 5;
+}
+```
+![img](./CPP_image/虚拟菱形继承结果.png)
+
+
+### 虚继承底层原理
+- 虚继承即为上述解决菱形继承问题的方法，虚拟菱形继承
+```
+class A     // sizeof(A) = 4  以机器为32位为准
+{
+	virtual void  fun1()
+	{
+
+	}
+};
+
+class B : public virtual A  // sizeof(B) = 4 + 4 不仅有vfptr，同时还有vbptr来指向虚基类表
+{
+	virtual void fun2()
+	{
+
+	}
+};
+
+class C : public virtual A  // 同样sizeof(C) = 4 + 4
+{
+	virtual void fun3()
+	{
+
+	}
+};
+
+class D : public B, public C    // sizeof(D) = 4 + 8 + 8
+{
+	virtual void fun4()
+	{
+
+	}
+};
+```
+- 上述代码形成的四个类在VS中的格式如下(可以使用VS-工具-命令行-开发者命令提示，进入对应cpp文件所在目录，输入**cl [fileName].cpp /d1reportSingleClassLayout[className]**)：
+![img](./CPP_image/虚继承A.png)  ![img](./CPP_image/虚继承B.png)
+![img](./CPP_image/虚继承C.png)  ![img](./CPP_image/虚继承D.png)
+- **解读：**
+    - 类A由于有虚函数，所以需要一个vfptr指向虚函数表，所以大小为4B
+    - 类B由于虚继承了类A，所以需要一个vbptr指向虚基类表，且该虚基类表中索引0存储vbptr到类B本身的位移，此处为-4是因为在vbptr前有vfptr需要向前移动四个字节才能够访问到类B本身的地址；索引1存储vbptr到虚继承数据的位移，从B的格式可以看出从vbptr到A所拥有的vfptr需要向后移动四个字节
+    - 类C同类B
+    - 类D由于普通继承了B和C，所以会将他们的所有数据全部继承过来(B的vfptr、vvptr以及C的vfptr、vbptr)，同时由于BC都虚继承了A，所以A在D中只存储一次，只需要A自己的vfptr即可
+    - 类D中对于B和C的虚基类表索引0处皆为-4是因为这个位移仅仅只是BC的vbptr相对于BC自己的便宜
+    - 类D的新的虚函数会与第一个继承的虚函数表合并在一起，如图中的``D::$vftable@B@``
+- **注意：**
+    - 当C同时虚继承AB(AB都是基类，不继承任何东西)时，C的vbptr只会存在一个
+    ![img](./CPP_image/多重虚继承C.png)
+
+
+
 ## const
 - **常量指针**
   - 不能够通过解引用改变指针指向的那个值，但是能够改变指针指向的地址，即指针指向的值为常量，而指针本身是变量
@@ -1024,7 +1147,7 @@ int main()
         std::cin.get();
     }
     ```
-  - **优化方法**
+- **优化方法**
     - vector一开始分配的capacity为1，当需要push多组数据时，会发生多次扩容，导致产生不必要的复制。如果事先知道需要存储的数据的大小，可以提前分配需要的空间，减小不必要的复制扩容
         ```
         vector<Vector3> vertices;
@@ -1043,6 +1166,19 @@ int main()
         //这本质上还是先创建了Vector3的对象然后在push，仍然会导致复制的产生
         //更何况，这编译根本过不去
         ```
+
+- **扩容机制**
+    - msvc使用的扩容因子为1.5，这是考虑到了cache和已释放空间的重用
+    - 如果是以固定长度进行递增的方式进行扩容，假设插入n个数据，每次扩充k个长度，均摊的时间复杂度为`O(n)`
+        $$
+            n + \sum^\frac{n}{k}_{i = 1}ik = n + k + 2k + 3k + ... + \frac{n}{k}k = n + \frac{(1 + n/k) + n}{2}
+        $$
+        前面的$n$即为插入 n 个数据所需要的时间复杂度，后方的$ik$则是代表每次扩容后都需要拷贝当前`vector`中的所有$ik$的数据
+    - 如果是以固定倍数进行递增的方式进行扩容，假设插入n个数据，每次扩充为原来的m倍，均摊时间复杂度为`O(1)`
+        $$
+            n + \sum^{\log_m^n}_{i = 1}m^i = n + m + m^2 + ... + m^{\log^n_m} = n + \frac{m(n - 1)}{m - 1}
+        $$
+        前面的$n$即为插入 n 个数据所需要的时间复杂度，后方的$m^i$则是代表每次扩容后都需要拷贝当前`vector`中的所有$m^i$的数据
 
 ## 返回多值
 - 如果类型相同，可以使用vector或arrary进行存储后返回，不要忘记了使用new，否则会返回空的值
